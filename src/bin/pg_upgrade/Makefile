@@ -42,7 +42,7 @@ clean distclean maintainer-clean:
 				 gpdemo-env.sh hostfile regression.diffs aomd_filehandler.c
 
 greenplum/aomd_filehandler.c: $(top_srcdir)/src/backend/access/appendonly/aomd_filehandler.c
-	rm -f $@ && cd greenplum && $(LN_S) $< aomd_filehandler.c
+	rm -f $@ && cd greenplum && $(LN_S) $(abspath $<) aomd_filehandler.c
 
 # When $(MAKE) is present, make automatically infers that this is a
 # recursive make. which is not actually what we want here, as that
