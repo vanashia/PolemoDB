@@ -1,0 +1,58 @@
+name: PomeloDB CI
+
+  on:
+    push:
+      branches:
+        - "**"
+    pull_request:
+    workflow_dispatch:
+
+  jobs:
+    build-and-test:
+      runs-on: macos-14
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v6
+
+        - name: Install dependencies
+          run: |
+            brew install cmake ninja apr libevent libyaml xerces-c pkg-config
+
+        - name: Configure
+          shell: bash
+          run: |
+            APR_CONFIG="$(brew --prefix apr)/bin/apr-1-config"
+            LIBEVENT="$(brew --prefix libevent)"
+            LIBYAML="$(brew --prefix libyaml)"
+            XERCES="$(brew --prefix xerces-c)"
+
+            cmake -S . -B build-ci -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
+              -DGPDB_WITH_PERL=ON \
+              -DGPDB_WITH_PYTHON=ON \
+              -DGPDB_WITH_LIBXML=ON \
+              -DGPDB_WITH_GSSAPI=ON \
+              -DGPDB_APR_CONFIG="$APR_CONFIG" \
+              "-DGPDB_LIBRARIES=$LIBEVENT/lib;$LIBYAML/lib;$XERCES/lib" \
+              "-DGPDB_INCLUDES=$LIBEVENT/include;$LIBYAML/include;$XERCES/include"
+
+        - name: Build
+          run: |
+            cmake --build build-ci \
+              --target gpdb \
+              --parallel 4
+
+        - name: Run CMake tests
+          run: |
+            ctest --test-dir build-ci --output-on-failure
+
+        - name: Run PomeloDB tests
+          run: |
+            python3 -m py_compile gpMgmt/bin/pomelodb
+            python3 gpMgmt/bin/test/pomelodb_test.py
+
+        - name: Check patch format
+          run: git diff --check
+
