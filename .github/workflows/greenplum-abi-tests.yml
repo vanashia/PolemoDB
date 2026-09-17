@@ -96,7 +96,7 @@ jobs:
           wget 'https://github.com/universal-ctags/ctags-nightly-build/releases/download/2023.07.05%2Bafdae39c0c2e508d113cbc570f4635b96159840c/uctags-2023.07.05-linux-x86_64.tar.xz'
           tar -xf uctags-2023.07.05-linux-x86_64.tar.xz
           cp uctags-2023.07.05-linux-x86_64/bin/* /usr/bin/
-          which ctags
+          command -v ctags
 
       - name: Download Greenplum source code
         uses: actions/checkout@v4

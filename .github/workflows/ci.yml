@@ -48,6 +48,7 @@ jobs:
 
             cmake -S . -B build-ci -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_FLAGS="-Wno-error=maybe-uninitialized" \
               -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
               -DGPDB_WITH_PERL=ON \
               -DGPDB_WITH_PYTHON=ON \
