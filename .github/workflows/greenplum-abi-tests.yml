@@ -86,7 +86,7 @@ jobs:
             libzstd-devel openssl-devel pam-devel perl-ExtUtils-Embed \
             python39 python39-devel python3-pip python3-psutil \
             python3-pyyaml readline-devel rsync wget xerces-c-devel \
-            uuid-devel zlib-devel
+            libuuid-devel zlib-devel
           dnf install -y --enablerepo=powertools libuv-devel libyaml-devel
           alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 39
           ln -sf /usr/bin/python3.9 /usr/local/bin/python
