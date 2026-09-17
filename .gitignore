@@ -69,6 +69,9 @@ lib*.pc
 /pgsql.sln.cache
 /Debug/
 /Release/
-/CMakeLists.txt
+# Keep the maintained top-level CMake entry point; generated CMake files in
+# subdirectories remain covered by their existing ignore rules.
+!/CMakeLists.txt
 /compile_commands.json
 /tmp_install/
+/build-*/

@@ -45,7 +45,7 @@ all: pg_regress$(X) extended_protocol_resqueue
 pg_regress$(X): pg_regress.o pg_regress_main.o $(WIN32RES) | submake-libpgport
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@
 extended_protocol_resqueue: extended_protocol_resqueue.c
-	$(CC) $(CPPFLAGS) -I../../../src/interfaces/libpq -L$(GPHOME)/lib -L../../../src/interfaces/libpq  -o $@ $< -lpq
+	$(CC) $(CPPFLAGS) -I$(libpq_srcdir) -L$(GPHOME)/lib -L$(top_builddir)/src/interfaces/libpq  -o $@ $< -lpq
 
 # dependencies ensure that path changes propagate
 pg_regress.o: pg_regress.c $(top_builddir)/src/port/pg_config_paths.h
@@ -54,7 +54,7 @@ regress_gp.o: override CPPFLAGS += -I$(libpq_srcdir)
 regress_gp.o: override LDFLAGS += -L$(top_builddir)/src/interfaces/libpq
 
 twophase_pqexecparams: twophase_pqexecparams.c
-	$(CC) $(CPPFLAGS) -I$(top_builddir)/src/interfaces/libpq -L$(GPHOME)/lib -L$(top_builddir)/src/interfaces/libpq  -o $@ $< -lpq
+	$(CC) $(CPPFLAGS) -I$(libpq_srcdir) -L$(GPHOME)/lib -L$(top_builddir)/src/interfaces/libpq  -o $@ $< -lpq
 
 # note: because of the submake dependency, this rule's action is really a no-op
 $(top_builddir)/src/port/pg_config_paths.h: | submake-libpgport

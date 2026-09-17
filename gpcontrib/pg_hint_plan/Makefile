@@ -33,6 +33,7 @@ PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 else
+subdir = gpcontrib/pg_hint_plan
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
@@ -64,5 +65,4 @@ $(STARBALLS): $(TARSOURCES)
 
 rpm12: $(STARBALL12)
 	MAKE_ROOT=`pwd` rpmbuild -bb SPECS/pg_hint_plan12.spec
-
 
