@@ -138,6 +138,7 @@ jobs:
                       --with-libraries="" --disable-rpath \
                       --prefix=/usr/local/greenplum-db-devel \
                       --mandir=/usr/local/greenplum-db-devel/man
+          make -C src/backend submake-utils-headers
           make -C src/backend -j`nproc`
           install -D src/backend/postgres /usr/local/greenplum-db-devel/bin/postgres
           install -d /usr/local/greenplum-db-devel/include
