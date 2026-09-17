@@ -9,34 +9,63 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config flex bison \
+            libapr1-dev libevent-dev libyaml-dev libxerces-c-dev \
+            libxml2-dev libkrb5-dev libperl-dev python3-dev \
+            libreadline-dev zlib1g-dev libbz2-dev libzstd-dev \
+            libcurl4-openssl-dev libssl-dev libicu-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
         run: |
           brew install cmake ninja apr libevent libyaml xerces-c pkg-config
 
       - name: Configure
         shell: bash
         run: |
-          APR_CONFIG="$(brew --prefix apr)/bin/apr-1-config"
-          LIBEVENT="$(brew --prefix libevent)"
-          LIBYAML="$(brew --prefix libyaml)"
-          XERCES="$(brew --prefix xerces-c)"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            APR_CONFIG="$(brew --prefix apr)/bin/apr-1-config"
+            LIBEVENT="$(brew --prefix libevent)"
+            LIBYAML="$(brew --prefix libyaml)"
+            XERCES="$(brew --prefix xerces-c)"
 
-          cmake -S . -B build-ci -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
-            -DGPDB_WITH_PERL=ON \
-            -DGPDB_WITH_PYTHON=ON \
-            -DGPDB_WITH_LIBXML=ON \
-            -DGPDB_WITH_GSSAPI=ON \
-            -DGPDB_APR_CONFIG="$APR_CONFIG" \
-            "-DGPDB_LIBRARIES=$LIBEVENT/lib;$LIBYAML/lib;$XERCES/lib" \
-            "-DGPDB_INCLUDES=$LIBEVENT/include;$LIBYAML/include;$XERCES/include"
+            cmake -S . -B build-ci -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
+              -DGPDB_WITH_PERL=ON \
+              -DGPDB_WITH_PYTHON=ON \
+              -DGPDB_WITH_LIBXML=ON \
+              -DGPDB_WITH_GSSAPI=ON \
+              -DGPDB_APR_CONFIG="$APR_CONFIG" \
+              "-DGPDB_LIBRARIES=$LIBEVENT/lib;$LIBYAML/lib;$XERCES/lib" \
+              "-DGPDB_INCLUDES=$LIBEVENT/include;$LIBYAML/include;$XERCES/include"
+          else
+            cmake -S . -B build-ci -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
+              -DGPDB_WITH_PERL=ON \
+              -DGPDB_WITH_PYTHON=ON \
+              -DGPDB_WITH_LIBXML=ON \
+              -DGPDB_WITH_GSSAPI=ON \
+              -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
+          fi
 
       - name: Build
         run: |
