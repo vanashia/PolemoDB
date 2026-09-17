@@ -100,13 +100,10 @@ jobs:
           command -v ctags
 
       - name: Download Greenplum source code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ matrix.repo }}
-          ref: ${{ matrix.ref }}
-          submodules: recursive
-          fetch-depth: 0 # Specify '0' to fetch all history for all branches and tags.
-          path: gpdb_src
+        run: |
+          git clone --recursive "https://github.com/${{ matrix.repo }}.git" gpdb_src
+          git -C gpdb_src checkout "${{ matrix.ref }}"
+          git -C gpdb_src submodule update --init --recursive
 
       - name: Install abi-dumper
         run: |
