@@ -89,6 +89,7 @@ jobs:
             libuuid-devel zlib-devel
           dnf install -y --enablerepo=powertools libuv-devel libyaml-devel
           alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 39
+          ln -sf /usr/bin/python3.9 /usr/local/bin/python3
           ln -sf /usr/bin/python3.9 /usr/local/bin/python
 
       ## FIXME: abi-dumper requires 'Universal Ctags' but the package manager only provides
