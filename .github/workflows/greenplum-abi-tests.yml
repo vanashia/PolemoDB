@@ -102,6 +102,10 @@ jobs:
       - name: Download Greenplum source code
         run: |
           if [ "${{ matrix.name }}" = "build-baseline" ]; then
+            git config --global url."https://github.com/pgbouncer/pgbouncer.git".insteadOf \
+              "https://github.com/greenplum-db/pgbouncer.git"
+            git config --global url."https://github.com/GreenPlumn/postgis.git".insteadOf \
+              "https://github.com/greenplum-db/postgis.git"
             git clone --recursive \
               "https://github.com/${{ matrix.repo }}.git" \
               gpdb_src
