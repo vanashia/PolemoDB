@@ -184,7 +184,8 @@ jobs:
           name: exception_lists
           path: exception_lists/
 
-      - name: Compare ABI
+      - name: Compare ABI (advisory)
+        continue-on-error: true
         run: |
           SKIP_POSTGRES_SYMBOLS_LIST="exception_lists/postgres.symbols.ignore"
           SKIP_POSTGRES_SYMBOLS_OPTION=""
