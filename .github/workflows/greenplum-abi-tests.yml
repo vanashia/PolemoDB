@@ -82,7 +82,7 @@ jobs:
           dnf groupinstall -y "Development Tools"
           dnf install -y --nobest \
             apr-devel bison bzip2-devel cmake flex gcc gcc-c++ git \
-            krb5-devel libcurl-devel libevent-devel libxml2-devel \
+            krb5-devel libcurl-devel libevent-devel libxml2-devel libyaml-devel \
             libzstd-devel openssl-devel perl-ExtUtils-Embed \
             python39 python39-devel python3-pip python3-psutil \
             python3-pyyaml readline-devel rsync wget xerces-c-devel \
