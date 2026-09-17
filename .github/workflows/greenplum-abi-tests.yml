@@ -80,7 +80,7 @@ jobs:
         run: |
           dnf install -y epel-release
           dnf groupinstall -y "Development Tools"
-          dnf install -y \
+          dnf install -y --nobest \
             apr-devel bison bzip2-devel cmake flex gcc gcc-c++ git \
             krb5-devel libcurl-devel libevent-devel libxml2-devel \
             libzstd-devel openssl-devel perl-ExtUtils-Embed \
