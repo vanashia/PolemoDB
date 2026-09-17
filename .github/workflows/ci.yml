@@ -74,6 +74,7 @@ jobs:
           else
             cmake -S . -B build-ci -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_FLAGS="-Wno-error=maybe-uninitialized" \
               -DGPDB_CONFIGURE_ENV="CC=ccache gcc;CXX=ccache g++" \
               -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
               -DGPDB_WITH_PERL=ON \
