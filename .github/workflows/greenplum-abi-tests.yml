@@ -101,7 +101,9 @@ jobs:
 
       - name: Download Greenplum source code
         run: |
-          git clone --recursive "https://github.com/${{ matrix.repo }}.git" gpdb_src
+          git clone --recursive \
+            "https://x-access-token:${{ github.token }}@github.com/${{ matrix.repo }}.git" \
+            gpdb_src
           git -C gpdb_src checkout "${{ matrix.ref }}"
           git -C gpdb_src submodule update --init --recursive
 
