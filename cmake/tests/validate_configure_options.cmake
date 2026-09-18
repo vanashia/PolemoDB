@@ -22,11 +22,17 @@ if(_hooktest_subdir EQUAL -1)
   message(FATAL_ERROR "hooktest must use its real source directory for VPATH builds")
 endif()
 file(READ "${GPDB_SOURCE_DIR}/src/test/regress/GNUmakefile" _regress_makefile)
+file(READ "${GPDB_SOURCE_DIR}/src/Makefile.global.in" _makefile_global)
 string(FIND "${_regress_makefile}"
   "$(CC) $(CPPFLAGS) -I$(libpq_srcdir) -L$(GPHOME)/lib -L$(top_builddir)/src/interfaces/libpq  -o $@ $< -lpq"
   _regress_libpq_source_include)
 if(_regress_libpq_source_include EQUAL -1)
   message(FATAL_ERROR "regress helper clients must include libpq headers from the source tree")
+endif()
+string(FIND "${_makefile_global}"
+  "$(srcdir)/scan_flaky_fault_injectors.sh" _regress_faultinjector_script)
+if(_regress_faultinjector_script EQUAL -1)
+  message(FATAL_ERROR "regress fault injector scan must use the source directory in VPATH builds")
 endif()
 file(READ "${GPDB_SOURCE_DIR}/gpMgmt/bin/stream/Makefile" _stream_makefile)
 string(FIND "${_stream_makefile}" "subdir = gpMgmt/bin/stream" _stream_subdir)

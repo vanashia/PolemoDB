@@ -115,19 +115,39 @@ jobs:
             check-koi8-r \
             check-koi8-to-win1251
 
+      - name: Collect source test artifacts
+        if: always()
+        run: |
+          collect_path() {
+            source_path="$1"
+            relative_path="${source_path#"$GPDB_LEGACY_BUILD_DIR/"}"
+            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
+            cp -a "$source_path" "ci-artifacts/$relative_path"
+          }
+
+          while IFS= read -r -d '' source_path; do
+            collect_path "$source_path"
+          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test" \
+            -type d \( -name tmp_check -o -name results -o -name output_iso \) \
+            -print0)
+
+          while IFS= read -r -d '' source_path; do
+            collect_path "$source_path"
+          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test" \
+            -type f \( -name regression.diffs -o -name regression.out \) \
+            -print0)
+
+          if [[ -f "$RUNNER_TEMP/pomelodb-locale.log" ]]; then
+            cp -a "$RUNNER_TEMP/pomelodb-locale.log" ci-artifacts/
+          fi
+
       - name: Upload source test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: src-tests-${{ runner.os }}-${{ github.run_id }}
           if-no-files-found: warn
-          path: |
-            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/tmp_check/**
-            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/regression.diffs
-            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/regression.out
-            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/results/**
-            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/output_iso/**
-            ${{ github.workspace }}/../pomelodb-locale.log
+          path: ci-artifacts/**
 
       - name: Show ccache statistics
         if: always()

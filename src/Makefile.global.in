@@ -526,7 +526,7 @@ endif
 
 ifeq ($(enable_debug_extensions),yes)
 define faultinjector_prep
-$(top_builddir)/src/test/regress/scan_flaky_fault_injectors.sh &&
+$(srcdir)/scan_flaky_fault_injectors.sh &&
 endef
 FAULTINJECTOR_OPTS := --load-extension=gp_inject_fault
 else
