@@ -202,6 +202,34 @@ foreach(_environment IN ITEMS
   endif()
 endforeach()
 
+set(_relative_mapping_build_dir
+    "${CMAKE_CURRENT_BINARY_DIR}/configure-relative-install-mapping")
+file(REMOVE_RECURSE "${_relative_mapping_build_dir}")
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -S "${GPDB_SOURCE_DIR}" -B "${_relative_mapping_build_dir}"
+          -G "Unix Makefiles"
+          -DGPDB_SKIP_CONFIGURE=ON
+          -DGPDB_ENABLE_NATIVE_TARGETS=OFF
+          -DGPDB_MAKE_PROGRAM=${_fake_make}
+          -DCMAKE_INSTALL_PREFIX=/opt/gpdb
+          -DCMAKE_INSTALL_BINDIR=bin
+          -DCMAKE_INSTALL_LIBDIR=lib
+  RESULT_VARIABLE _relative_mapping_result
+  OUTPUT_VARIABLE _relative_mapping_output
+  ERROR_VARIABLE _relative_mapping_error)
+if(NOT _relative_mapping_result EQUAL 0)
+  message(FATAL_ERROR "relative install directory mapping failed:
+${_relative_mapping_output}
+${_relative_mapping_error}")
+endif()
+file(READ "${_relative_mapping_build_dir}/CMakeCache.txt" _relative_mapping_cache)
+foreach(_argument IN ITEMS --bindir=/opt/gpdb/bin --libdir=/opt/gpdb/lib)
+  string(FIND "${_relative_mapping_cache}" "${_argument}" _relative_argument_pos)
+  if(_relative_argument_pos EQUAL -1)
+    message(FATAL_ERROR "relative install directory was not resolved: ${_argument}")
+  endif()
+endforeach()
+
 file(READ "${_mapped_build_dir}/CMakeFiles/gpdb.dir/build.make" _gpdb_build_rule)
 string(REGEX MATCH "GPDB_LEGACY_BUILD_DIR:PATH=([^\n]+)" _legacy_cache_line "${_mapping_cache}")
 if(NOT _legacy_cache_line)

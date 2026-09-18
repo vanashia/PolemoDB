@@ -193,7 +193,12 @@ foreach(_dir IN ITEMS BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR
     LOCALEDIR MANDIR DOCDIR HTMLDIR DVIDIR PDFDIR PSDIR)
   if(DEFINED CMAKE_INSTALL_${_dir} AND NOT "${CMAKE_INSTALL_${_dir}}" STREQUAL "")
     string(TOLOWER "${_dir}" _configure_dir)
-    list(APPEND _configure_args "--${_configure_dir}=${CMAKE_INSTALL_${_dir}}")
+    set(_configure_value "${CMAKE_INSTALL_${_dir}}")
+    if(NOT IS_ABSOLUTE "${_configure_value}")
+      get_filename_component(_configure_value "${_configure_value}" ABSOLUTE
+                             BASE_DIR "${CMAKE_INSTALL_PREFIX}")
+    endif()
+    list(APPEND _configure_args "--${_configure_dir}=${_configure_value}")
   endif()
 endforeach()
 if(NOT "${GPDB_BUILD}" STREQUAL "")
