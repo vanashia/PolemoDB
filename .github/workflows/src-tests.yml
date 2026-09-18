@@ -16,8 +16,8 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
-      GPDB_LEGACY_BUILD_DIR: ${{ runner.temp }}/pomelodb-legacy
-      POMELODB_INSTALL_PREFIX: ${{ runner.temp }}/pomelodb
+      GPDB_LEGACY_BUILD_DIR: ${{ github.workspace }}/../pomelodb-legacy
+      POMELODB_INSTALL_PREFIX: ${{ github.workspace }}/../pomelodb
 
     steps:
       - name: Checkout
@@ -122,12 +122,12 @@ jobs:
           name: src-tests-${{ runner.os }}-${{ github.run_id }}
           if-no-files-found: warn
           path: |
-            ${{ runner.temp }}/pomelodb-legacy/src/test/**/tmp_check/**
-            ${{ runner.temp }}/pomelodb-legacy/src/test/**/regression.diffs
-            ${{ runner.temp }}/pomelodb-legacy/src/test/**/regression.out
-            ${{ runner.temp }}/pomelodb-legacy/src/test/**/results/**
-            ${{ runner.temp }}/pomelodb-legacy/src/test/**/output_iso/**
-            ${{ runner.temp }}/pomelodb-locale.log
+            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/tmp_check/**
+            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/regression.diffs
+            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/regression.out
+            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/results/**
+            ${{ github.workspace }}/../pomelodb-legacy/src/test/**/output_iso/**
+            ${{ github.workspace }}/../pomelodb-locale.log
 
       - name: Show ccache statistics
         if: always()
