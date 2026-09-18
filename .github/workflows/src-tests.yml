@@ -144,8 +144,10 @@ jobs:
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
           export LC_ALL=C
           host_aliases=(pomelodb-ci-0 pomelodb-ci-1 pomelodb-ci-2)
-          for host_alias in "${host_aliases[@]}"; do
-            echo "127.0.0.1 $host_alias" | sudo tee -a /etc/hosts >/dev/null
+          host_ips=(127.0.0.2 127.0.0.3 127.0.0.4)
+          for index in "${!host_aliases[@]}"; do
+            host_alias="${host_aliases[$index]}"
+            echo "${host_ips[$index]} $host_alias" | sudo tee -a /etc/hosts >/dev/null
             ssh-keyscan -H "$host_alias" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
           done
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
