@@ -43,7 +43,8 @@ jobs:
             libldap-common libperl-dev libssl-dev libxml2-dev \
             libyaml-dev libxerces-c-dev libzstd-dev locales \
             krb5-admin-server krb5-kdc ldap-utils slapd \
-            libreadline-dev perl python3-dev python3-psycopg2 zlib1g-dev
+            libreadline-dev openssh-server perl python3-dev python3-psycopg2 \
+            zlib1g-dev
 
           sudo localedef -i de_DE -f ISO-8859-1 de_DE.ISO8859-1 || true
           sudo localedef -i el_GR -f ISO-8859-7 gr_GR.ISO8859-7 || true
@@ -93,12 +94,54 @@ jobs:
           test -r "$GPDB_LEGACY_BUILD_DIR/src/test/regress/GPTest.pm"
           "$GPDB_LEGACY_BUILD_DIR/src/test/regress/gpdiff.pl" -V
 
-      - name: Run src/test check suites with temporary databases
+      - name: Initialize production MPP test cluster
+        run: |
+          set -euo pipefail
+          sudo service ssh start
+          install -d -m 700 "$HOME/.ssh"
+          if [[ ! -f "$HOME/.ssh/id_ed25519" ]]; then
+            ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/id_ed25519"
+          fi
+          touch "$HOME/.ssh/authorized_keys"
+          grep -qxF "$(cat "$HOME/.ssh/id_ed25519.pub")" \
+            "$HOME/.ssh/authorized_keys" || \
+            cat "$HOME/.ssh/id_ed25519.pub" >> "$HOME/.ssh/authorized_keys"
+          chmod 600 "$HOME/.ssh/authorized_keys"
+          ssh-keyscan -H "$(hostname -s)" localhost >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+
+          cmake --build build-src-tests --target gpdb-install --parallel 4
+          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
+          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
+          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
+          export LC_ALL=C
+          host_name="$(hostname -s)"
+          cat > "$RUNNER_TEMP/hostfile_gpinitsystem" <<EOF
+          $host_name
+          EOF
+          cat > "$RUNNER_TEMP/gpinitsystem_config" <<EOF
+          MACHINE_LIST_FILE=$RUNNER_TEMP/hostfile_gpinitsystem
+          SEG_PREFIX=gpseg
+          PORT_BASE=6000
+          declare -a DATA_DIRECTORY=($RUNNER_TEMP/pomelodb-segment)
+          COORDINATOR_HOSTNAME=$host_name
+          COORDINATOR_DIRECTORY=$RUNNER_TEMP/pomelodb-coordinator
+          COORDINATOR_PORT=5432
+          TRUSTED_SHELL=ssh
+          ENCODING=UNICODE
+          EOF
+          gpinitsystem -c "$RUNNER_TEMP/gpinitsystem_config" -a
+          gpstate -Q
+          psql -v ON_ERROR_STOP=1 -c \
+            "select count(*) from gp_segment_configuration where status='u' and role='p'"
+
+      - name: Run src/test installcheck suites against production MPP
         env:
           PG_TEST_EXTRA: ssl kerberos ldap
         run: |
-          echo "make check initializes temporary databases through with_temp_install for each suite"
-          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" check
+          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
+          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
+          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck
 
       - name: Install database for excluded src/test suites
         run: |
@@ -109,24 +152,10 @@ jobs:
       - name: Run locale suites
         env:
           PGHOST: 127.0.0.1
-          PGPORT: 55432
+          PGPORT: 5432
         run: |
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          "$POMELODB_INSTALL_PREFIX/bin/initdb" \
-            --no-locale \
-            --username=runner \
-            "$RUNNER_TEMP/pomelodb-locale-data"
-          "$POMELODB_INSTALL_PREFIX/bin/pg_ctl" \
-            -D "$RUNNER_TEMP/pomelodb-locale-data" \
-            -o "-p $PGPORT" \
-            -l "$RUNNER_TEMP/pomelodb-locale.log" \
-            start
-          cleanup_locale_server() {
-            "$POMELODB_INSTALL_PREFIX/bin/pg_ctl" \
-              -D "$RUNNER_TEMP/pomelodb-locale-data" \
-              stop -m immediate
-          }
-          trap cleanup_locale_server EXIT
+          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
 
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test/locale" \
             check-de_DE.ISO8859-1 \
