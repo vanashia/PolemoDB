@@ -81,12 +81,17 @@ jobs:
         run: |
           cmake --build build-src-tests --target gpdb --parallel 4
 
-      - name: Prepare regression Perl helper modules
+      - name: Prepare and verify regression Perl helpers
         run: |
-          for helper in atmsort.pm explain.pm GPTest.pm; do
+          for helper in atmsort.pm explain.pm; do
             ln -sf "$GITHUB_WORKSPACE/src/test/regress/$helper" \
               "$GPDB_LEGACY_BUILD_DIR/src/test/regress/$helper"
           done
+
+          # GPTest.pm is generated from GPTest.pm.in by configure; it must
+          # remain the build-tree version so it contains the configured DB version.
+          test -r "$GPDB_LEGACY_BUILD_DIR/src/test/regress/GPTest.pm"
+          "$GPDB_LEGACY_BUILD_DIR/src/test/regress/gpdiff.pl" -V
 
       - name: Run src/test check suites with temporary databases
         env:
