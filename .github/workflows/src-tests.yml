@@ -81,6 +81,13 @@ jobs:
         run: |
           cmake --build build-src-tests --target gpdb --parallel 4
 
+      - name: Prepare regression Perl helper modules
+        run: |
+          for helper in atmsort.pm GPTest.pm; do
+            ln -sf "$GITHUB_WORKSPACE/src/test/regress/$helper" \
+              "$GPDB_LEGACY_BUILD_DIR/src/test/regress/$helper"
+          done
+
       - name: Run src/test check suites with temporary databases
         env:
           PG_TEST_EXTRA: ssl kerberos ldap
