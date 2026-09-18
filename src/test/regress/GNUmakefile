@@ -40,14 +40,15 @@ EXTRADEFS = '-DHOST_TUPLE="$(host_tuple)"' \
 
 # Build regression test driver
 
-all: pg_regress$(X) extended_protocol_resqueue gpdiff.pl gpstringsubs.pl
+all: pg_regress$(X) extended_protocol_resqueue \
+	$(CURDIR)/gpdiff.pl $(CURDIR)/gpstringsubs.pl
 
 # VPATH builds place pg_regress in the build tree.  Keep the helper scripts
 # beside it because pg_regress locates them relative to its own executable.
-gpdiff.pl: $(srcdir)/gpdiff.pl
+$(CURDIR)/gpdiff.pl: $(srcdir)/gpdiff.pl
 	rm -f $@ && $(LN_S) $(srcdir)/gpdiff.pl $@
 
-gpstringsubs.pl: $(srcdir)/gpstringsubs.pl
+$(CURDIR)/gpstringsubs.pl: $(srcdir)/gpstringsubs.pl
 	rm -f $@ && $(LN_S) $(srcdir)/gpstringsubs.pl $@
 
 pg_regress$(X): pg_regress.o pg_regress_main.o $(WIN32RES) | submake-libpgport
