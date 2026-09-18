@@ -150,6 +150,30 @@ jobs:
           export EXTRA_REGRESS_OPTS="--outputdir=$GITHUB_WORKSPACE/src/test/regress"
           mkdir -p "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml" \
             "$GITHUB_WORKSPACE/src/test/regress/expected/uao_ddl"
+          for uao_dir in uao_dml uao_ddl; do
+            for source_file in "$GITHUB_WORKSPACE/src/test/regress/output/$uao_dir"/*.source; do
+              source_name="$(basename "$source_file" .source)"
+              for orientation in row column; do
+                am_name=ao_row
+                ao_segment=aoseg
+                if [[ "$orientation" == column ]]; then
+                  am_name=ao_column
+                  ao_segment=aocsseg
+                fi
+                output_name="${source_name}_${orientation}.out"
+                if [[ "$source_name" == *_optimizer ]]; then
+                  output_name="${source_name%_optimizer}_${orientation}_optimizer.out"
+                fi
+                sed \
+                  -e "s|@amname@|$am_name|g" \
+                  -e "s|@aoseg@|$ao_segment|g" \
+                  -e "s|@abs_srcdir@|$GITHUB_WORKSPACE/src/test/regress|g" \
+                  "$source_file" \
+                  > "$GITHUB_WORKSPACE/src/test/regress/expected/$uao_dir/$output_name"
+              done
+            done
+          done
+          test -r "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml/gp_fastsequence_row.out"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck
 
       - name: Install database for excluded src/test suites
