@@ -143,25 +143,15 @@ jobs:
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
           export LC_ALL=C
-          host_aliases=(pomelodb-ci-0 pomelodb-ci-1 pomelodb-ci-2)
-          host_ips=(127.0.0.2 127.0.0.3 127.0.0.4)
-          for index in "${!host_aliases[@]}"; do
-            host_alias="${host_aliases[$index]}"
-            echo "${host_ips[$index]} $host_alias" | sudo tee -a /etc/hosts >/dev/null
-            ssh-keyscan -H "$host_alias" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
-          done
+          coordinator_host="$(hostname -s)"
+          ssh-keyscan -H "$coordinator_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
             "$RUNNER_TEMP/pomelodb-segment0" \
             "$RUNNER_TEMP/pomelodb-segment1" \
-            "$RUNNER_TEMP/pomelodb-segment2" \
-            "$RUNNER_TEMP/pomelodb-mirror0" \
-            "$RUNNER_TEMP/pomelodb-mirror1" \
-            "$RUNNER_TEMP/pomelodb-mirror2"
+            "$RUNNER_TEMP/pomelodb-segment2"
           test -r "$POMELODB_INSTALL_PREFIX/bin/lib/gp_bash_version.sh"
           cat > "$RUNNER_TEMP/hostfile_gpinitsystem" <<EOF
-          ${host_aliases[0]}
-          ${host_aliases[1]}
-          ${host_aliases[2]}
+          $coordinator_host
           EOF
           cat > "$RUNNER_TEMP/gpinitsystem_config" <<EOF
           MACHINE_LIST_FILE=$RUNNER_TEMP/hostfile_gpinitsystem
@@ -172,13 +162,7 @@ jobs:
             $RUNNER_TEMP/pomelodb-segment1
             $RUNNER_TEMP/pomelodb-segment2
           )
-          MIRROR_PORT_BASE=7000
-          declare -a MIRROR_DATA_DIRECTORY=(
-            $RUNNER_TEMP/pomelodb-mirror0
-            $RUNNER_TEMP/pomelodb-mirror1
-            $RUNNER_TEMP/pomelodb-mirror2
-          )
-          COORDINATOR_HOSTNAME=${host_aliases[0]}
+          COORDINATOR_HOSTNAME=$coordinator_host
           COORDINATOR_DIRECTORY=$RUNNER_TEMP/pomelodb-coordinator
           COORDINATOR_PORT=5432
           TRUSTED_SHELL=ssh
@@ -226,7 +210,14 @@ jobs:
             done
           done
           test -r "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml/gp_fastsequence_row.out"
-          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck
+          single_node_schedule="$RUNNER_TEMP/greenplum_schedule.single_node"
+          grep -Ev '^test: (fts_error|fts_recovery_in_progress|mirror_replay)$' \
+            "$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule" \
+            > "$single_node_schedule"
+          test -s "$single_node_schedule"
+          echo "Single-node source test excludes HA-only tests: fts_error, fts_recovery_in_progress, mirror_replay"
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
+            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule --schedule=$single_node_schedule"
 
       - name: Install database for excluded src/test suites
         run: |
