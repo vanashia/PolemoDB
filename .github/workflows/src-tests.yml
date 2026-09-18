@@ -147,6 +147,8 @@ jobs:
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
+          mkdir -p "$GPDB_LEGACY_BUILD_DIR/src/test/regress/expected/uao_dml" \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/regress/expected/uao_ddl"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck
 
       - name: Install database for excluded src/test suites
