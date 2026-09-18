@@ -83,7 +83,7 @@ jobs:
 
       - name: Prepare regression Perl helper modules
         run: |
-          for helper in atmsort.pm GPTest.pm; do
+          for helper in atmsort.pm explain.pm GPTest.pm; do
             ln -sf "$GITHUB_WORKSPACE/src/test/regress/$helper" \
               "$GPDB_LEGACY_BUILD_DIR/src/test/regress/$helper"
           done
