@@ -111,13 +111,18 @@ jobs:
           ssh-keyscan -H "$(hostname -s)" localhost >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 
           cmake --build build-src-tests --target gpdb-install --parallel 4
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/regress" all
+          ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/regress/regress.so" \
+            "$GITHUB_WORKSPACE/src/test/regress/regress.so"
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
           export LC_ALL=C
           host_name="$(hostname -s)"
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
-            "$RUNNER_TEMP/pomelodb-segment"
+            "$RUNNER_TEMP/pomelodb-segment0" \
+            "$RUNNER_TEMP/pomelodb-segment1" \
+            "$RUNNER_TEMP/pomelodb-segment2"
           test -r "$POMELODB_INSTALL_PREFIX/bin/lib/gp_bash_version.sh"
           cat > "$RUNNER_TEMP/hostfile_gpinitsystem" <<EOF
           $host_name
@@ -126,7 +131,11 @@ jobs:
           MACHINE_LIST_FILE=$RUNNER_TEMP/hostfile_gpinitsystem
           SEG_PREFIX=gpseg
           PORT_BASE=6000
-          declare -a DATA_DIRECTORY=($RUNNER_TEMP/pomelodb-segment)
+          declare -a DATA_DIRECTORY=(
+            $RUNNER_TEMP/pomelodb-segment0
+            $RUNNER_TEMP/pomelodb-segment1
+            $RUNNER_TEMP/pomelodb-segment2
+          )
           COORDINATOR_HOSTNAME=$host_name
           COORDINATOR_DIRECTORY=$RUNNER_TEMP/pomelodb-coordinator
           COORDINATOR_PORT=5432
