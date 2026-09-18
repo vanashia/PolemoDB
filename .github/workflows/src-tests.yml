@@ -147,7 +147,7 @@ jobs:
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          export EXTRA_REGRESS_OPTS="--outputdir=$GITHUB_WORKSPACE/src/test/regress"
+          export EXTRA_REGRESS_OPTS="--max-concurrent-tests=4 --outputdir=$GITHUB_WORKSPACE/src/test/regress"
           mkdir -p "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml" \
             "$GITHUB_WORKSPACE/src/test/regress/expected/uao_ddl"
           for uao_dir in uao_dml uao_ddl; do
@@ -212,6 +212,18 @@ jobs:
           done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test" \
             -type d \( -name tmp_check -o -name results -o -name output_iso \) \
             -print0)
+
+          if [[ -d "$GITHUB_WORKSPACE/src/test/regress/results" ]]; then
+            mkdir -p ci-artifacts/source-regress
+            cp -a "$GITHUB_WORKSPACE/src/test/regress/results" \
+              ci-artifacts/source-regress/results
+          fi
+          for report in regression.out regression.diffs; do
+            if [[ -f "$GITHUB_WORKSPACE/src/test/regress/$report" ]]; then
+              cp -a "$GITHUB_WORKSPACE/src/test/regress/$report" \
+                ci-artifacts/source-regress/$report
+            fi
+          done
 
           while IFS= read -r -d '' source_path; do
             collect_path "$source_path"
