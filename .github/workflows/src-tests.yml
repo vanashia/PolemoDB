@@ -134,6 +134,7 @@ jobs:
           ENCODING=UNICODE
           EOF
           gpinitsystem -c "$RUNNER_TEMP/gpinitsystem_config" -a
+          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
           gpstate -Q
           psql -v ON_ERROR_STOP=1 -c \
             "select count(*) from gp_segment_configuration where status='u' and role='p'"
@@ -144,6 +145,7 @@ jobs:
         run: |
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
+          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck
 
@@ -160,6 +162,7 @@ jobs:
         run: |
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
+          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
 
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test/locale" \
             check-de_DE.ISO8859-1 \
