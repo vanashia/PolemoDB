@@ -56,8 +56,15 @@ set(_gpdb_port_sources)
 foreach(_name IN LISTS _gpdb_port_names)
   if(EXISTS "${CMAKE_SOURCE_DIR}/src/port/${_name}.c")
     list(APPEND _gpdb_port_sources "${CMAKE_SOURCE_DIR}/src/port/${_name}.c")
-  endif()
+    endif()
 endforeach()
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+  list(APPEND _gpdb_port_sources
+       "${CMAKE_SOURCE_DIR}/src/port/pg_crc32c_armv8.c")
+else()
+  list(APPEND _gpdb_port_sources
+       "${CMAKE_SOURCE_DIR}/src/port/pg_crc32c_sb8.c")
+endif()
 add_library(pgport STATIC ${_gpdb_port_sources})
 add_dependencies(pgport gpdb-generated-paths)
 target_compile_definitions(pgport PRIVATE FRONTEND)
@@ -92,7 +99,14 @@ if(GPDB_WITH_OPENSSL AND EXISTS "${CMAKE_SOURCE_DIR}/src/common/sha2_openssl.c")
 else()
   list(APPEND _gpdb_common_sources "${CMAKE_SOURCE_DIR}/src/common/sha2.c")
 endif()
-add_library(pgcommon STATIC ${_gpdb_common_sources})
+set(_gpdb_frontend_common_sources ${_gpdb_common_sources})
+foreach(_name IN ITEMS fe_memutils file_utils logging restricted_token)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/src/common/${_name}.c")
+    list(APPEND _gpdb_frontend_common_sources
+         "${CMAKE_SOURCE_DIR}/src/common/${_name}.c")
+  endif()
+endforeach()
+add_library(pgcommon STATIC ${_gpdb_frontend_common_sources})
 add_dependencies(pgcommon gpdb-generated-paths)
 target_compile_definitions(pgcommon PRIVATE FRONTEND)
 target_include_directories(pgcommon PRIVATE ${_gpdb_generated_include_dirs})
@@ -115,7 +129,7 @@ if(GPDB_WITH_OPENSSL AND TARGET OpenSSL::Crypto)
   target_link_libraries(pgcommon PUBLIC OpenSSL::Crypto)
 endif()
 
-add_library(pgcommon_shlib STATIC ${_gpdb_common_sources})
+add_library(pgcommon_shlib STATIC ${_gpdb_frontend_common_sources})
 add_dependencies(pgcommon_shlib gpdb-generated-paths)
 target_compile_definitions(pgcommon_shlib PRIVATE FRONTEND)
 target_include_directories(pgcommon_shlib PRIVATE ${_gpdb_generated_include_dirs})
@@ -142,6 +156,17 @@ foreach(_name IN LISTS _gpdb_feutils_names)
     list(APPEND _gpdb_feutils_sources "${CMAKE_SOURCE_DIR}/src/fe_utils/${_name}.c")
   endif()
 endforeach()
+if(GPDB_FLEX_EXECUTABLE)
+  set(_gpdb_psqlscan "${CMAKE_CURRENT_BINARY_DIR}/fe_utils/psqlscan.c")
+  add_custom_command(
+    OUTPUT "${_gpdb_psqlscan}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/fe_utils"
+    COMMAND "${GPDB_FLEX_EXECUTABLE}" -Cfe -p -p -o "${_gpdb_psqlscan}"
+            "${CMAKE_SOURCE_DIR}/src/fe_utils/psqlscan.l"
+    DEPENDS "${CMAKE_SOURCE_DIR}/src/fe_utils/psqlscan.l")
+  list(APPEND _gpdb_feutils_sources "${_gpdb_psqlscan}")
+endif()
 add_library(pgfeutils STATIC ${_gpdb_feutils_sources})
 add_dependencies(pgfeutils gpdb-generated-paths)
 target_compile_definitions(pgfeutils PRIVATE FRONTEND)
@@ -165,6 +190,11 @@ list(APPEND _gpdb_libpq_sources
 if(GPDB_WITH_OPENSSL AND EXISTS "${CMAKE_SOURCE_DIR}/src/interfaces/libpq/fe-secure-openssl.c")
   list(APPEND _gpdb_libpq_sources "${CMAKE_SOURCE_DIR}/src/interfaces/libpq/fe-secure-openssl.c")
 endif()
+if(GPDB_WITH_GSSAPI)
+  list(APPEND _gpdb_libpq_sources
+      "${CMAKE_SOURCE_DIR}/src/interfaces/libpq/fe-gssapi-common.c"
+      "${CMAKE_SOURCE_DIR}/src/interfaces/libpq/fe-secure-gssapi.c")
+endif()
 add_library(libpq STATIC ${_gpdb_libpq_sources})
 add_dependencies(libpq gpdb-generated-paths)
 target_compile_definitions(libpq PRIVATE FRONTEND UNSAFE_STAT_OK)
@@ -173,6 +203,9 @@ target_include_directories(libpq PRIVATE ${_gpdb_generated_include_dirs}
 target_link_libraries(libpq PUBLIC pgcommon pgport Threads::Threads)
 if(GPDB_WITH_OPENSSL AND TARGET OpenSSL::SSL)
   target_link_libraries(libpq PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+if(GPDB_WITH_GSSAPI)
+  target_link_libraries(libpq PUBLIC "${GPDB_GSS_LIBRARY}")
 endif()
 
 add_library(libpq_shared SHARED ${_gpdb_libpq_sources})
@@ -185,11 +218,14 @@ set_target_properties(libpq_shared PROPERTIES OUTPUT_NAME pq SOVERSION 5)
 if(GPDB_WITH_OPENSSL AND TARGET OpenSSL::SSL)
   target_link_libraries(libpq_shared PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
+if(GPDB_WITH_GSSAPI)
+  target_link_libraries(libpq_shared PUBLIC "${GPDB_GSS_LIBRARY}")
+endif()
 
 add_executable(pg_config "${CMAKE_SOURCE_DIR}/src/bin/pg_config/pg_config.c")
 target_compile_definitions(pg_config PRIVATE FRONTEND)
 target_include_directories(pg_config PRIVATE ${_gpdb_generated_include_dirs})
-target_link_libraries(pg_config PRIVATE pgport)
+target_link_libraries(pg_config PRIVATE pgcommon pgport)
 
 function(gpdb_add_simple_client _target)
   add_executable(${_target} "${CMAKE_SOURCE_DIR}/src/bin/${_target}/${_target}.c")
@@ -250,6 +286,9 @@ target_include_directories(pg_waldump PRIVATE ${_gpdb_generated_include_dirs}
     "${CMAKE_SOURCE_DIR}/src/bin/pg_waldump"
     "${CMAKE_SOURCE_DIR}/src/backend")
 target_link_libraries(pg_waldump PRIVATE pgcommon pgport Threads::Threads)
+if(GPDB_WITH_ZSTD)
+  target_link_libraries(pg_waldump PRIVATE "${GPDB_ZSTD_LIBRARY}")
+endif()
 
 set(_gpdb_psql_names
     command common copy crosstabview describe help input large_obj mainloop prompt
@@ -260,7 +299,7 @@ foreach(_name IN LISTS _gpdb_psql_names)
     list(APPEND _gpdb_psql_sources "${CMAKE_SOURCE_DIR}/src/bin/psql/${_name}.c")
   endif()
 endforeach()
-set(_gpdb_psql_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/psql")
+set(_gpdb_psql_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/psql-generated")
 if(GPDB_FLEX_EXECUTABLE)
   set(_gpdb_psql_scan "${_gpdb_psql_generated_dir}/psqlscanslash.c")
   add_custom_command(
@@ -289,9 +328,16 @@ add_executable(psql ${_gpdb_psql_sources})
 target_compile_definitions(psql PRIVATE FRONTEND)
 target_include_directories(psql PRIVATE ${_gpdb_generated_include_dirs}
     "${CMAKE_SOURCE_DIR}/src/bin/psql"
-    "${CMAKE_BINARY_DIR}/psql"
+    "${_gpdb_psql_generated_dir}"
     "${CMAKE_SOURCE_DIR}/src/interfaces/libpq")
 target_link_libraries(psql PRIVATE pgfeutils libpq pgcommon pgport Threads::Threads)
+if(GPDB_WITH_READLINE AND GPDB_READLINE_LIBRARY)
+  target_compile_definitions(psql PRIVATE HAVE_LIBREADLINE=1)
+  if(GPDB_READLINE_INCLUDE_DIR)
+    target_include_directories(psql PRIVATE "${GPDB_READLINE_INCLUDE_DIR}")
+  endif()
+  target_link_libraries(psql PRIVATE "${GPDB_READLINE_LIBRARY}")
+endif()
 
 if(NOT "${GPDB_LDFLAGS_EX}" STREQUAL "")
   separate_arguments(_gpdb_native_exe_ldflags UNIX_COMMAND "${GPDB_LDFLAGS_EX}")

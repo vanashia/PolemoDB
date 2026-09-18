@@ -18,8 +18,8 @@ installdirs:
 
 install: installdirs
 	for file in $(PROGRAMS); do \
-		$(INSTALL_SCRIPT) $$file '$(DESTDIR)$(sbindir)/'$$file ; \
-		$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(sbindir)/'$$file ; \
+		$(INSTALL_SCRIPT) $(top_srcdir)/gpMgmt/sbin/$$file '$(DESTDIR)$(sbindir)/'$$file ; \
+		$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(sbindir)/'$$file ; \
 	done
 
 uninstall:

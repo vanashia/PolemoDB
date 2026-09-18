@@ -72,14 +72,14 @@ $(top_builddir)/src/port/pg_config_paths.h: | submake-libpgport
 install: all installdirs
 	$(INSTALL_PROGRAM) pg_regress$(X) '$(DESTDIR)$(pgxsdir)/$(subdir)/pg_regress$(X)'
 	$(INSTALL_PROGRAM) regress.so '$(DESTDIR)$(pkglibdir)/regress.so'
-	$(INSTALL_PROGRAM) gpdiff.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpdiff.pl'
-	$(INSTALL_PROGRAM) gpstringsubs.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpstringsubs.pl'
-	$(INSTALL_PROGRAM) atmsort.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pl'
-	$(INSTALL_PROGRAM) atmsort.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pm'
-	$(INSTALL_PROGRAM) explain.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pl'
-	$(INSTALL_PROGRAM) explain.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pm'
+	$(INSTALL_PROGRAM) $(srcdir)/gpdiff.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpdiff.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/gpstringsubs.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpstringsubs.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/atmsort.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/atmsort.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pm'
+	$(INSTALL_PROGRAM) $(srcdir)/explain.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/explain.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pm'
 	$(INSTALL_PROGRAM) GPTest.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/GPTest.pm'
-	$(INSTALL_PROGRAM) scan_flaky_fault_injectors.sh '$(DESTDIR)$(pgxsdir)/$(subdir)/scan_flaky_fault_injectors.sh'
+	$(INSTALL_PROGRAM) $(srcdir)/scan_flaky_fault_injectors.sh '$(DESTDIR)$(pgxsdir)/$(subdir)/scan_flaky_fault_injectors.sh'
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(pgxsdir)/$(subdir)'
 
