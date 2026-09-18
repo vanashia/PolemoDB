@@ -111,6 +111,9 @@ python3 gpMgmt/bin/test/pomelodb_test.py
 
 GitHub Actions runs the supported build and test matrix on Linux and macOS.
 The workflow uses Ninja and ccache; see [.github/workflows/ci.yml](.github/workflows/ci.yml).
+The separate [source-test workflow](.github/workflows/src-tests.yml) runs the
+`src/test` check suites, optional SSL/Kerberos/LDAP tests, and locale suites on
+Ubuntu.
 
 ## Repository layout
 

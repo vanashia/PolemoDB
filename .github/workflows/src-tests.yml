@@ -1,0 +1,134 @@
+name: PomeloDB Source Tests
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  src-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      GPDB_LEGACY_BUILD_DIR: ${{ runner.temp }}/pomelodb-legacy
+      POMELODB_INSTALL_PREFIX: ${{ runner.temp }}/pomelodb
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: src-tests-ccache-${{ runner.os }}-${{ hashFiles('configure', 'CMakeLists.txt') }}
+          restore-keys: |
+            src-tests-ccache-${{ runner.os }}-
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential ccache cmake ninja-build pkg-config flex bison \
+            libapr1-dev libbz2-dev libcurl4-openssl-dev libevent-dev \
+            libicu-dev libipc-run-perl libkrb5-dev libldap2-dev \
+            libldap-common libperl-dev libssl-dev libxml2-dev \
+            libyaml-dev libxerces-c-dev libzstd-dev locales \
+            krb5-admin-server krb5-kdc ldap-utils slapd \
+            libreadline-dev perl python3-dev zlib1g-dev
+
+          sudo localedef -i de_DE -f ISO-8859-1 de_DE.ISO8859-1 || true
+          sudo localedef -i el_GR -f ISO-8859-7 gr_GR.ISO8859-7 || true
+          sudo localedef -i ru_RU -f KOI8-R ru_RU.KOI8-R || true
+
+      - name: Configure legacy test build through CMake
+        run: |
+          cmake -S . -B build-src-tests -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$POMELODB_INSTALL_PREFIX" \
+            -DGPDB_LEGACY_BUILD_DIR="$GPDB_LEGACY_BUILD_DIR" \
+            -DGPDB_ENABLE_NATIVE_TARGETS=OFF \
+            -DPOMELODB_WITH_DUCKDB=OFF \
+            -DGPDB_ENABLE_TAP_TESTS=ON \
+            -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
+            -DGPDB_WITH_PERL=ON \
+            -DGPDB_WITH_PYTHON=ON \
+            -DGPDB_WITH_OPENSSL=ON \
+            -DGPDB_WITH_GSSAPI=ON \
+            -DGPDB_WITH_LDAP=ON \
+            -DGPDB_WITH_LIBXML=ON \
+            -DGPDB_WITH_ZLIB=ON \
+            -DGPDB_WITH_LIBBZ2=ON \
+            -DGPDB_WITH_ZSTD=ON \
+            -DGPDB_WITH_LIBCURL=ON \
+            -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
+
+      - name: Build database and test programs
+        run: |
+          cmake --build build-src-tests --target gpdb --parallel 4
+
+      - name: Run src/test check suites
+        env:
+          PG_TEST_EXTRA: ssl kerberos ldap
+        run: |
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" check
+
+      - name: Install database for excluded src/test suites
+        run: |
+          cmake --build build-src-tests --target gpdb-install --parallel 4
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/examples" all
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/locale" all
+
+      - name: Run locale suites
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 55432
+        run: |
+          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
+          "$POMELODB_INSTALL_PREFIX/bin/initdb" \
+            --no-locale \
+            --username=runner \
+            "$RUNNER_TEMP/pomelodb-locale-data"
+          "$POMELODB_INSTALL_PREFIX/bin/pg_ctl" \
+            -D "$RUNNER_TEMP/pomelodb-locale-data" \
+            -o "-p $PGPORT" \
+            -l "$RUNNER_TEMP/pomelodb-locale.log" \
+            start
+          cleanup_locale_server() {
+            "$POMELODB_INSTALL_PREFIX/bin/pg_ctl" \
+              -D "$RUNNER_TEMP/pomelodb-locale-data" \
+              stop -m immediate
+          }
+          trap cleanup_locale_server EXIT
+
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/locale" \
+            check-de_DE.ISO8859-1 \
+            check-gr_GR.ISO8859-7 \
+            check-koi8-r \
+            check-koi8-to-win1251
+
+      - name: Upload source test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: src-tests-${{ runner.os }}-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/pomelodb-legacy/src/test/**/tmp_check/**
+            ${{ runner.temp }}/pomelodb-legacy/src/test/**/regression.diffs
+            ${{ runner.temp }}/pomelodb-legacy/src/test/**/regression.out
+            ${{ runner.temp }}/pomelodb-legacy/src/test/**/results/**
+            ${{ runner.temp }}/pomelodb-legacy/src/test/**/output_iso/**
+            ${{ runner.temp }}/pomelodb-locale.log
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache --show-stats
