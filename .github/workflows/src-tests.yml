@@ -210,14 +210,10 @@ jobs:
             done
           done
           test -r "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml/gp_fastsequence_row.out"
-          single_node_schedule="$RUNNER_TEMP/greenplum_schedule.single_node"
-          grep -Ev '^test: (fts_error|fts_recovery_in_progress|mirror_replay)$' \
-            "$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule" \
-            > "$single_node_schedule"
-          test -s "$single_node_schedule"
-          echo "Single-node source test excludes HA-only tests: fts_error, fts_recovery_in_progress, mirror_replay"
+          echo "Single-node source tests use parallel_schedule and mirrorless_schedule"
+          echo "Mirror/HA fault-injection tests remain for a mirrored test environment"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
-            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule --schedule=$single_node_schedule"
+            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule --schedule=$GITHUB_WORKSPACE/src/test/regress/mirrorless_schedule"
 
       - name: Install database for excluded src/test suites
         run: |
