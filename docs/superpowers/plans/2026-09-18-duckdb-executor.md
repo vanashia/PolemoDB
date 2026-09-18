@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produces a checkoutable `third_party/duckdb` source tree containing DuckDB's CMake targets.
 
-- [ ] **Step 1: Add the submodule declaration and update CI checkout.**
+- [x] **Step 1: Add the submodule declaration and update CI checkout.**
 
 Use HTTPS in `.gitmodules` so GitHub-hosted runners can fetch the public source,
 while retaining the requested DuckDB repository as the source of truth:
@@ -42,7 +42,7 @@ while retaining the requested DuckDB repository as the source of truth:
 
 Set `submodules: recursive` on the existing `actions/checkout` step.
 
-- [ ] **Step 2: Verify the dependency is present and pinned.**
+- [x] **Step 2: Verify the dependency is present and pinned.**
 
 Run:
 
@@ -53,7 +53,7 @@ git -C third_party/duckdb rev-parse HEAD
 
 Expected: the path is checked out at the commit recorded by the gitlink.
 
-- [ ] **Step 3: Commit the dependency metadata.**
+- [x] **Step 3: Commit the dependency metadata.**
 
 ```bash
 git add .gitmodules third_party/duckdb .github/workflows/ci.yml
@@ -70,13 +70,13 @@ git commit -m "build: add DuckDB source submodule"
 **Interfaces:**
 - Produces target `pomelodb_duckdb_executor` and cache option `POMELODB_WITH_DUCKDB`.
 
-- [ ] **Step 1: Write a failing CMake validation test.**
+- [x] **Step 1: Write a failing CMake validation test.**
 
 Extend the existing CMake interface test to assert that the ON configuration
 declares the executor target and that the OFF configuration does not require the
 submodule.
 
-- [ ] **Step 2: Run the validation test and verify it fails.**
+- [x] **Step 2: Run the validation test and verify it fails.**
 
 Run:
 
@@ -87,14 +87,14 @@ ctest --test-dir /tmp/pomelodb-duckdb-cmake-test -R gpdb-cmake-interface --outpu
 
 Expected: FAIL because the DuckDB option and target do not exist.
 
-- [ ] **Step 3: Add the minimal DuckDB CMake integration.**
+- [x] **Step 3: Add the minimal DuckDB CMake integration.**
 
 Before `add_subdirectory(third_party/duckdb ...)`, set `BUILD_SHELL=OFF`,
 `BUILD_UNITTESTS=OFF`, and the embedded build options. Add the wrapper source
 through `add_library(pomelodb_duckdb_executor ...)` and link it publicly to
 `duckdb_static`.
 
-- [ ] **Step 4: Run ON and OFF configure tests.**
+- [x] **Step 4: Run ON and OFF configure tests.**
 
 ```bash
 cmake -S . -B /tmp/pomelodb-duckdb-on -G Ninja -DGPDB_SKIP_CONFIGURE=ON -DPOMELODB_WITH_DUCKDB=ON
@@ -104,7 +104,7 @@ cmake -S . -B /tmp/pomelodb-duckdb-off -G Ninja -DGPDB_SKIP_CONFIGURE=ON -DPOMEL
 Expected: both configure successfully; ON exposes the DuckDB target and OFF
 does not touch the submodule.
 
-- [ ] **Step 5: Commit the build wiring.**
+- [x] **Step 5: Commit the build wiring.**
 
 ```bash
 git add CMakeLists.txt cmake/PomeloDuckDB.cmake cmake/tests
@@ -122,7 +122,7 @@ git commit -m "build: wire DuckDB into native CMake"
 **Interfaces:**
 - Produces `pomelodb::duckdb::QueryResult` and `PomeloDuckDBExecutor::Execute(std::string_view)`.
 
-- [ ] **Step 1: Write the failing SELECT test.**
+- [x] **Step 1: Write the failing SELECT test.**
 
 ```cpp
 TEST(PomeloDuckDBExecutor, ExecutesArithmeticSelect) {
@@ -133,26 +133,26 @@ TEST(PomeloDuckDBExecutor, ExecutesArithmeticSelect) {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify the expected missing-symbol failure.**
+- [x] **Step 2: Run the test and verify the expected missing-symbol failure.**
 
 Run the focused CTest target and confirm failure because the facade is not yet implemented.
 
-- [ ] **Step 3: Implement the minimal RAII facade.**
+- [x] **Step 3: Implement the minimal RAII facade.**
 
 Construct `duckdb::DuckDB` and `duckdb::Connection`, call `Query`, throw on
 `HasError`, fetch `DataChunk`s, and convert every value through `Value::IsNull`
 and `Value::ToString`.
 
-- [ ] **Step 4: Run the focused test and verify it passes.**
+- [x] **Step 4: Run the focused test and verify it passes.**
 
 Run the same CTest target; expected: PASS.
 
-- [ ] **Step 5: Add row conversion and error tests, then repeat red-green.**
+- [x] **Step 5: Add row conversion and error tests, then repeat red-green.**
 
 Cover a two-column `VALUES` query and invalid SQL. Assert the public result and
 error message, not DuckDB internal object state.
 
-- [ ] **Step 6: Commit the facade and tests.**
+- [x] **Step 6: Commit the facade and tests.**
 
 ```bash
 git add src/duckdb cmake CMakeLists.txt
@@ -172,7 +172,7 @@ git commit -m "feat: add embedded DuckDB executor facade"
 - Accepts one SQL argument or reads SQL from stdin.
 - Exit 0 for successful SQL and non-zero with the DuckDB error on failure.
 
-- [ ] **Step 1: Write a failing executable smoke test.**
+- [x] **Step 1: Write a failing executable smoke test.**
 
 Register a CTest test that invokes:
 
@@ -182,17 +182,17 @@ pomelodb-sql "SELECT 42 AS answer"
 
 and checks the output contains `answer` and `42`.
 
-- [ ] **Step 2: Run CTest and verify the executable is missing.**
+- [x] **Step 2: Run CTest and verify the executable is missing.**
 
 Expected: FAIL because the target has not been created.
 
-- [ ] **Step 3: Implement the command with the facade.**
+- [x] **Step 3: Implement the command with the facade.**
 
 Join command-line SQL arguments with spaces, otherwise read all stdin, execute
 once, print the header and rows as tab-separated text, and catch `std::exception`
 to report errors and return `1`.
 
-- [ ] **Step 4: Run the smoke test and direct command.**
+- [x] **Step 4: Run the smoke test and direct command.**
 
 ```bash
 ctest --test-dir build-duckdb --output-on-failure -R pomelodb-sql
@@ -201,7 +201,7 @@ build-duckdb/pomelodb-sql 'SELECT 42 AS answer'
 
 Expected: CTest passes and the command prints `answer` and `42`.
 
-- [ ] **Step 5: Commit the executable.**
+- [x] **Step 5: Commit the executable.**
 
 ```bash
 git add src/bin/pomelodb-sql cmake/PomeloDuckDB.cmake
@@ -215,12 +215,12 @@ git commit -m "feat: add PomeloDB DuckDB SQL entry point"
 - Modify: `docs/pomelodb.md` or create `docs/duckdb.md`
 - Test: complete native CMake build and CTest suite
 
-- [ ] **Step 1: Document local setup and no-container build.**
+- [x] **Step 1: Document local setup and no-container build.**
 
 Document `git clone --recurse-submodules`, native Ninja configure/build, the
 SQL command, stdin usage, and the `POMELODB_WITH_DUCKDB=OFF` fallback.
 
-- [ ] **Step 2: Run the complete native build.**
+- [x] **Step 2: Build all DuckDB integration targets and run the complete CTest suite.**
 
 ```bash
 cmake -S . -B build-duckdb -G Ninja -DGPDB_SKIP_CONFIGURE=ON -DPOMELODB_WITH_DUCKDB=ON
@@ -228,7 +228,7 @@ cmake --build build-duckdb --parallel 4
 ctest --test-dir build-duckdb --output-on-failure
 ```
 
-- [ ] **Step 3: Run the direct SELECT smoke test.**
+- [x] **Step 3: Run the direct SELECT smoke test.**
 
 ```bash
 build-duckdb/pomelodb-sql 'SELECT 1 + 1 AS answer'
@@ -236,14 +236,14 @@ build-duckdb/pomelodb-sql 'SELECT 1 + 1 AS answer'
 
 Expected: exit code 0, header `answer`, and value `2`.
 
-- [ ] **Step 4: Verify the opt-out configure.**
+- [x] **Step 4: Verify the opt-out configure.**
 
 ```bash
 cmake -S . -B /tmp/pomelodb-duckdb-off-final -G Ninja \
   -DGPDB_SKIP_CONFIGURE=ON -DPOMELODB_WITH_DUCKDB=OFF
 ```
 
-- [ ] **Step 5: Review the final diff and commit.**
+- [x] **Step 5: Review the final diff and commit.**
 
 ```bash
 git diff --check

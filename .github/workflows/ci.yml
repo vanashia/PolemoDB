@@ -89,7 +89,7 @@ jobs:
       - name: Build
         run: |
           cmake --build build-ci \
-            --target gpdb \
+            --target gpdb pomelodb-sql pomelodb_duckdb_executor_test \
             --parallel 4
 
       - name: Run CMake tests
