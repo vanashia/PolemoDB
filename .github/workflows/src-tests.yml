@@ -114,6 +114,11 @@ jobs:
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test/regress" all
           ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/regress/regress.so" \
             "$GITHUB_WORKSPACE/src/test/regress/regress.so"
+          for uao_dir in uao_dml uao_ddl; do
+            mkdir -p "$GITHUB_WORKSPACE/src/test/regress/sql/$uao_dir"
+            cp -a "$GPDB_LEGACY_BUILD_DIR/src/test/regress/sql/$uao_dir/." \
+              "$GITHUB_WORKSPACE/src/test/regress/sql/$uao_dir/"
+          done
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
@@ -155,6 +160,7 @@ jobs:
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
+          export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
           export EXTRA_REGRESS_OPTS="--max-concurrent-tests=20 --outputdir=$GITHUB_WORKSPACE/src/test/regress"
           mkdir -p "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml" \
