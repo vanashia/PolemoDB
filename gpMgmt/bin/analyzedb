@@ -22,7 +22,7 @@ import tempfile
 import time
 from datetime import datetime, timedelta
 from contextlib import closing
-import pipes  # for shell-quoting, pipes.quote()
+import shlex as pipes  # for shell-quoting, pipes.quote()
 import fcntl
 import itertools
 import psycopg2

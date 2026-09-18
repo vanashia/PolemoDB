@@ -13,7 +13,7 @@ import shlex
 import socket
 import signal
 import uuid
-import pipes
+import shlex as pipes
 import re
 from pkg_resources import parse_version
 
@@ -815,4 +815,3 @@ def get_rsync_version():
     cmd = Command("get rsync version", cmdStr=cmdStr)
     cmd.run(validateAfter=True)
     return cmd.get_stdout()
-

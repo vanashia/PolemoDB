@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Manage one local PomeloDB instance from the installed pomelodb.conf."""
+"""Manage a local PomeloDB instance from the installed pomelodb.conf."""
 
 import os
-import shlex
 import subprocess
 import sys
 
@@ -11,8 +10,8 @@ CONFIG_NAME = "pomelodb.conf"
 MANAGED_BEGIN = "# BEGIN POMELODB MANAGED LOGGING"
 MANAGED_END = "# END POMELODB MANAGED LOGGING"
 ALLOWED_KEYS = {
-    "data_directory", "log_directory", "initdb_options", "server_options",
-    "stop_mode", "wait",
+    "cluster_mode", "coordinator_data_directory", "segment_data_directories",
+    "log_directory", "stop_mode", "wait",
 }
 
 
@@ -54,18 +53,28 @@ def parse_config(root):
     except OSError as error:
         raise ConfigError("cannot read %s: %s" % (config_path, error))
 
-    for key in ("data_directory", "log_directory"):
+    if values.get("cluster_mode", "mpp") != "mpp":
+        raise ConfigError("only cluster_mode=mpp is supported")
+    for key in ("coordinator_data_directory", "segment_data_directories",
+                "log_directory"):
         if not values.get(key):
             raise ConfigError("%s must be set in %s" % (key, config_path))
-        values[key] = resolve_path(values[key], root)
+    values["coordinator_data_directory"] = resolve_path(
+        values["coordinator_data_directory"], root)
+    values["segment_data_directories"] = [
+        resolve_path(path.strip(), root)
+        for path in values["segment_data_directories"].split(",")
+        if path.strip()
+    ]
+    if not values["segment_data_directories"]:
+        raise ConfigError("segment_data_directories must not be empty")
+    values["log_directory"] = resolve_path(values["log_directory"], root)
+    for data_path in [values["coordinator_data_directory"]] + values[
+            "segment_data_directories"]:
+        common_path = os.path.commonpath([data_path, values["log_directory"]])
+        if common_path in (data_path, values["log_directory"]):
+            raise ConfigError("data directories and log_directory must be separate")
 
-    common_path = os.path.commonpath(
-        [values["data_directory"], values["log_directory"]])
-    if common_path in (values["data_directory"], values["log_directory"]):
-        raise ConfigError("data_directory and log_directory must be separate")
-
-    values.setdefault("initdb_options", "")
-    values.setdefault("server_options", "")
     values.setdefault("stop_mode", "fast")
     if values["stop_mode"] not in ("smart", "fast", "immediate"):
         raise ConfigError("stop_mode must be smart, fast, or immediate")
@@ -88,12 +97,16 @@ def run(command):
         return 1
 
 
-def configure_logging(values):
-    data_directory = values["data_directory"]
+def configure_cluster_logging(values):
+    for data_directory in [values["coordinator_data_directory"]] + values[
+            "segment_data_directories"]:
+        configure_logging_for_directory(data_directory, values["log_directory"])
+
+
+def configure_logging_for_directory(data_directory, log_directory):
     config_path = os.path.join(data_directory, "postgresql.conf")
     if not os.path.isfile(config_path):
-        raise ConfigError("%s does not exist; run pomelodb init first" % config_path)
-
+        raise ConfigError("%s does not exist; initialize the cluster first" % config_path)
     with open(config_path, encoding="utf-8") as config_file:
         lines = config_file.readlines()
     retained = []
@@ -109,11 +122,10 @@ def configure_logging(values):
             retained.append(line)
     if retained and not retained[-1].endswith("\n"):
         retained[-1] += "\n"
-    log_directory = values["log_directory"].replace("'", "''")
+    escaped_log_directory = log_directory.replace("'", "''")
     retained.extend([
-        "\n", MANAGED_BEGIN + "\n",
-        "logging_collector = on\n",
-        "log_directory = '%s'\n" % log_directory,
+        "\n", MANAGED_BEGIN + "\n", "logging_collector = on\n",
+        "log_directory = '%s'\n" % escaped_log_directory,
         "log_filename = 'pomelodb-%Y-%m-%d_%H%M%S.log'\n",
         MANAGED_END + "\n",
     ])
@@ -122,42 +134,67 @@ def configure_logging(values):
 
 
 def init(root, values):
-    os.makedirs(values["log_directory"], mode=0o750, exist_ok=True)
-    command = [command_path(root, "initdb"), "-D", values["data_directory"]]
-    command.extend(shlex.split(values["initdb_options"]))
-    result = run(command)
-    if result == 0:
-        configure_logging(values)
-    return result
+    configure_cluster_logging(values)
+    return 0
 
 
 def start(root, values):
     os.makedirs(values["log_directory"], mode=0o750, exist_ok=True)
-    configure_logging(values)
-    command = [command_path(root, "pg_ctl"), "start", "-D", values["data_directory"],
-               "-l", os.path.join(values["log_directory"], "pomelodb-startup.log")]
-    if values["server_options"]:
-        command.extend(["-o", values["server_options"]])
-    if values["wait"]:
-        command.append("-w")
-    return run(command)
+    configure_cluster_logging(values)
+    commands = []
+    for data_directory in values["segment_data_directories"]:
+        commands.append([command_path(root, "pg_ctl"), "start", "-D",
+                         data_directory, "-l",
+                         os.path.join(values["log_directory"], "segment-startup.log"),
+                         "-o", "-c gp_role=execute"])
+    commands.append([command_path(root, "pg_ctl"), "start", "-D",
+                     values["coordinator_data_directory"], "-l",
+                     os.path.join(values["log_directory"], "coordinator-startup.log"),
+                     "-o", "-c gp_role=dispatch"])
+    return run_all(commands, values["wait"])
 
 
 def stop(root, values):
-    command = [command_path(root, "pg_ctl"), "stop", "-D", values["data_directory"],
-               "-m", values["stop_mode"]]
-    if values["wait"]:
-        command.append("-w")
-    return run(command)
+    commands = [[command_path(root, "pg_ctl"), "stop", "-D",
+                 values["coordinator_data_directory"], "-m", values["stop_mode"]]]
+    commands.extend([
+        [command_path(root, "pg_ctl"), "stop", "-D", data_directory,
+         "-m", values["stop_mode"]]
+        for data_directory in values["segment_data_directories"]
+    ])
+    return run_all(commands, values["wait"])
 
 
 def reload(root, values):
-    configure_logging(values)
-    return run([command_path(root, "pg_ctl"), "reload", "-D", values["data_directory"]])
+    configure_cluster_logging(values)
+    commands = [[command_path(root, "pg_ctl"), "reload", "-D",
+                 values["coordinator_data_directory"]]]
+    commands.extend([
+        [command_path(root, "pg_ctl"), "reload", "-D", data_directory]
+        for data_directory in values["segment_data_directories"]
+    ])
+    return run_all(commands, False)
 
 
 def status(root, values):
-    return run([command_path(root, "pg_ctl"), "status", "-D", values["data_directory"]])
+    commands = [[command_path(root, "pg_ctl"), "status", "-D",
+                 values["coordinator_data_directory"]]]
+    commands.extend([
+        [command_path(root, "pg_ctl"), "status", "-D", data_directory]
+        for data_directory in values["segment_data_directories"]
+    ])
+    return run_all(commands, False)
+
+
+def run_all(commands, wait):
+    result = 0
+    for command in commands:
+        if wait:
+            command.append("-w")
+        result = run(command)
+        if result != 0:
+            break
+    return result
 
 
 def usage():

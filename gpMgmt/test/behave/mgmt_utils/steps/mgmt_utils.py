@@ -4,7 +4,7 @@ import glob
 import json
 import os
 import re
-import pipes
+import shlex as pipes
 import shutil
 import socket
 import tempfile

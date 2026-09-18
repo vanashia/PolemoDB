@@ -1,4 +1,4 @@
-import pipes
+import shlex as pipes
 import tempfile
 import os
 
@@ -259,4 +259,3 @@ def impl(context):
 @given('insert additional data into the tablespace')
 def impl(context):
     context.tablespaces["outerspace"].insert_more_data()
-

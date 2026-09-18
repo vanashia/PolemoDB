@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 
-import pipes
+import shlex as pipes
 
 from behave import given, when, then
 from test.behave_utils.utils import *
