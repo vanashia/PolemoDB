@@ -33,6 +33,11 @@ jobs:
           restore-keys: |
             src-tests-ccache-${{ runner.os }}-
 
+      - name: Reset and verify ccache
+        run: |
+          ccache --zero-stats
+          ccache --show-config
+
       - name: Install test dependencies
         run: |
           sudo apt-get update
@@ -55,6 +60,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_INSTALL_PREFIX="$POMELODB_INSTALL_PREFIX" \
             -DGPDB_LEGACY_BUILD_DIR="$GPDB_LEGACY_BUILD_DIR" \
+            -DGPDB_CONFIGURE_ENV="CC=ccache gcc;CXX=ccache g++" \
             -DGPDB_ENABLE_NATIVE_TARGETS=OFF \
             -DPOMELODB_WITH_DUCKDB=OFF \
             -DGPDB_ENABLE_TAP_TESTS=ON \
@@ -75,10 +81,11 @@ jobs:
         run: |
           cmake --build build-src-tests --target gpdb --parallel 4
 
-      - name: Run src/test check suites
+      - name: Run src/test check suites with temporary databases
         env:
           PG_TEST_EXTRA: ssl kerberos ldap
         run: |
+          echo "make check initializes temporary databases through with_temp_install for each suite"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" check
 
       - name: Install database for excluded src/test suites
