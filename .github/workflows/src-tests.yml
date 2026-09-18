@@ -115,6 +115,9 @@ jobs:
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
           export LC_ALL=C
           host_name="$(hostname -s)"
+          mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
+            "$RUNNER_TEMP/pomelodb-segment"
+          test -r "$POMELODB_INSTALL_PREFIX/bin/lib/gp_bash_version.sh"
           cat > "$RUNNER_TEMP/hostfile_gpinitsystem" <<EOF
           $host_name
           EOF

@@ -502,6 +502,22 @@ if(NOT GPDB_SKIP_CONFIGURE)
   string(REPLACE "##Version: ##" "${_gpdb_version}" _gpdb_gptest_contents
          "${_gpdb_gptest_contents}")
   file(WRITE "${_gpdb_gptest_destination}" "${_gpdb_gptest_contents}")
+
+  # configure generates this management shell helper from a source-relative
+  # template.  Materialize it explicitly for an external VPATH build so the
+  # installed gpinitsystem can source it.
+  set(_gpdb_bash_version_template
+      "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in")
+  set(_gpdb_bash_version_destination
+      "${GPDB_LEGACY_BUILD_DIR}/gpMgmt/bin/lib/gp_bash_version.sh")
+  if(NOT EXISTS "${_gpdb_bash_version_template}")
+    message(FATAL_ERROR "missing gp_bash_version.sh template")
+  endif()
+  file(READ "${_gpdb_bash_version_template}" _gpdb_bash_version_contents)
+  string(REPLACE "##version##" "${_gpdb_version}"
+         _gpdb_bash_version_contents "${_gpdb_bash_version_contents}")
+  file(WRITE "${_gpdb_bash_version_destination}"
+       "${_gpdb_bash_version_contents}")
 endif()
 
 add_custom_target(gpdb ALL
