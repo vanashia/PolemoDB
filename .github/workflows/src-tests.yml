@@ -116,8 +116,28 @@ jobs:
             "$GITHUB_WORKSPACE/src/test/regress/regress.so"
           for uao_dir in uao_dml uao_ddl; do
             mkdir -p "$GITHUB_WORKSPACE/src/test/regress/sql/$uao_dir"
-            cp -a "$GPDB_LEGACY_BUILD_DIR/src/test/regress/sql/$uao_dir/." \
-              "$GITHUB_WORKSPACE/src/test/regress/sql/$uao_dir/"
+            for source_file in "$GITHUB_WORKSPACE/src/test/regress/input/$uao_dir"/*.source; do
+              source_name="$(basename "$source_file" .source)"
+              for orientation in row column; do
+                am_name=ao_row
+                ao_segment=aoseg
+                if [[ "$orientation" == column ]]; then
+                  am_name=ao_column
+                  ao_segment=aocsseg
+                fi
+                output_name="${source_name}_${orientation}.sql"
+                if [[ "$source_name" == *_optimizer ]]; then
+                  output_name="${source_name%_optimizer}_${orientation}_optimizer.sql"
+                fi
+                sed \
+                  -e "s|@amname@|$am_name|g" \
+                  -e "s|@aoseg@|$ao_segment|g" \
+                  -e "s|@abs_srcdir@|$GITHUB_WORKSPACE/src/test/regress|g" \
+                  -e "s|@abs_builddir@|$GITHUB_WORKSPACE/src/test/regress|g" \
+                  "$source_file" \
+                  > "$GITHUB_WORKSPACE/src/test/regress/sql/$uao_dir/$output_name"
+              done
+            done
           done
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
@@ -127,7 +147,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
             "$RUNNER_TEMP/pomelodb-segment0" \
             "$RUNNER_TEMP/pomelodb-segment1" \
-            "$RUNNER_TEMP/pomelodb-segment2"
+            "$RUNNER_TEMP/pomelodb-segment2" \
+            "$RUNNER_TEMP/pomelodb-mirror0" \
+            "$RUNNER_TEMP/pomelodb-mirror1" \
+            "$RUNNER_TEMP/pomelodb-mirror2"
           test -r "$POMELODB_INSTALL_PREFIX/bin/lib/gp_bash_version.sh"
           cat > "$RUNNER_TEMP/hostfile_gpinitsystem" <<EOF
           $host_name
@@ -140,6 +163,12 @@ jobs:
             $RUNNER_TEMP/pomelodb-segment0
             $RUNNER_TEMP/pomelodb-segment1
             $RUNNER_TEMP/pomelodb-segment2
+          )
+          MIRROR_PORT_BASE=7000
+          declare -a MIRROR_DATA_DIRECTORY=(
+            $RUNNER_TEMP/pomelodb-mirror0
+            $RUNNER_TEMP/pomelodb-mirror1
+            $RUNNER_TEMP/pomelodb-mirror2
           )
           COORDINATOR_HOSTNAME=$host_name
           COORDINATOR_DIRECTORY=$RUNNER_TEMP/pomelodb-coordinator
