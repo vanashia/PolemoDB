@@ -114,7 +114,7 @@ def configure_logging(values):
         "\n", MANAGED_BEGIN + "\n",
         "logging_collector = on\n",
         "log_directory = '%s'\n" % log_directory,
-        "log_filename = 'pomelodb-%%Y-%%m-%%d_%%H%%M%%S.log'\n",
+        "log_filename = 'pomelodb-%Y-%m-%d_%H%M%S.log'\n",
         MANAGED_END + "\n",
     ])
     with open(config_path, "w", encoding="utf-8") as config_file:
