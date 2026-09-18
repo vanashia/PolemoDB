@@ -13,7 +13,7 @@ The default file keeps database files and logs in separate directories:
 data_directory=data
 log_directory=log
 initdb_options=
-server_options=
+server_options=-b -1 -C -1 -c gp_role=utility
 stop_mode=fast
 wait=true
 ```
