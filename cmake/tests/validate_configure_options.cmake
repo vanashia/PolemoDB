@@ -72,6 +72,24 @@ foreach(_required IN ITEMS "$(top_srcdir)/gpMgmt/sbin/$$file" "$(top_srcdir)/put
     message(FATAL_ERROR "management scripts must install from the VPATH source tree")
   endif()
 endforeach()
+foreach(_version_makefile IN ITEMS
+    "gpMgmt/bin/Makefile"
+    "gpMgmt/bin/gppylib/Makefile"
+    "gpMgmt/bin/gppylib/programs/Makefile")
+  file(READ "${GPDB_SOURCE_DIR}/${_version_makefile}" _version_makefile_text)
+  string(FIND "${_version_makefile_text}" "$(top_srcdir)/putversion"
+    _version_source_path)
+  if(_version_source_path EQUAL -1)
+    message(FATAL_ERROR "${_version_makefile} must use the VPATH source putversion helper")
+  endif()
+endforeach()
+file(READ "${GPDB_SOURCE_DIR}/gpMgmt/bin/gppylib/data/Makefile" _catalog_json_data_makefile)
+string(FIND "${_catalog_json_data_makefile}"
+  "$(top_srcdir)/gpMgmt/bin/gppylib/data/$(CATALOG_JSON)"
+  _catalog_json_install)
+if(_catalog_json_install EQUAL -1)
+  message(FATAL_ERROR "catalog JSON install must use the VPATH source output")
+endif()
 file(READ "${GPDB_SOURCE_DIR}/gpMgmt/bin/stream/Makefile" _stream_makefile)
 string(FIND "${_stream_makefile}" "subdir = gpMgmt/bin/stream" _stream_subdir)
 if(_stream_subdir EQUAL -1)

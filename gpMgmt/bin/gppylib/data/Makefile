@@ -14,7 +14,8 @@ installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(libdir)/python/gppylib/data'
 
 install: all installdirs
-	$(INSTALL_DATA) $(CATALOG_JSON) '$(DESTDIR)$(libdir)/python/gppylib/data/$(CATALOG_JSON)'
+	$(INSTALL_DATA) $(top_srcdir)/gpMgmt/bin/gppylib/data/$(CATALOG_JSON) \
+		'$(DESTDIR)$(libdir)/python/gppylib/data/$(CATALOG_JSON)'
 
 uninstall:
 	rm -f '$(DESTDIR)$(libdir)/python/gppylib/data/$(CATALOG_JSON)' ;
@@ -24,4 +25,3 @@ distclean: clean
 
 clean:
 	rm -f $(CATALOG_JSON)
-

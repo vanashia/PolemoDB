@@ -22,7 +22,7 @@ endif
 # and the compressor is available in all databases.
 .PHONY: install-data
 install-data:
-	$(INSTALL_DATA) zstd_compression.sql '$(DESTDIR)$(datadir)/cdb_init.d/zstd_compression.sql'
+	$(INSTALL_DATA) $(srcdir)/zstd_compression.sql '$(DESTDIR)$(datadir)/cdb_init.d/zstd_compression.sql'
 
 install: install-data
 
