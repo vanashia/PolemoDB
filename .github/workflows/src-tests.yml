@@ -49,7 +49,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: src-tests-ccache-${{ runner.os }}-${{ hashFiles('configure', 'CMakeLists.txt') }}
+          key: src-tests-ccache-${{ runner.os }}-${{ hashFiles('configure', 'CMakeLists.txt') }}-${{ github.sha }}
           restore-keys: |
             src-tests-ccache-${{ runner.os }}-
 
@@ -217,7 +217,7 @@ jobs:
           export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
           export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          export EXTRA_REGRESS_OPTS="--max-concurrent-tests=20 --outputdir=$GITHUB_WORKSPACE/src/test/regress"
+          export EXTRA_REGRESS_OPTS="--max-concurrent-tests=20"
           mkdir -p "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml" \
             "$GITHUB_WORKSPACE/src/test/regress/expected/uao_ddl"
           for uao_dir in uao_dml uao_ddl; do
@@ -258,8 +258,10 @@ jobs:
           echo "Single-runner source tests use coordinator, standby, primary, and mirror instances"
           echo "Running the upstream regression schedules independently to preserve setup order"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
+            REGRESS_OPTS="--dlpath=. --max-concurrent-tests=20 --init-file=$GITHUB_WORKSPACE/src/test/regress/init_file --outputdir=$GITHUB_WORKSPACE/src/test/regress" \
             REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
+            REGRESS_OPTS="--dlpath=. --max-concurrent-tests=20 --init-file=$GITHUB_WORKSPACE/src/test/regress/init_file --outputdir=$GITHUB_WORKSPACE/src/test/regress" \
             REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule"
 
       - name: Install database for excluded src/test suites
