@@ -146,7 +146,6 @@ jobs:
           coordinator_host="$(hostname -s)"
           ssh-keyscan -H "$coordinator_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
-            "$RUNNER_TEMP/pomelodb-standby" \
             "$RUNNER_TEMP/pomelodb-segment0" \
             "$RUNNER_TEMP/pomelodb-segment1" \
             "$RUNNER_TEMP/pomelodb-segment2" \
