@@ -20,6 +20,10 @@ on:
       - '.github/scripts/**'
       - '.abi-check/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   abi-dump-setup:
     runs-on: ubuntu-latest

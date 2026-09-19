@@ -4,8 +4,28 @@ on:
   push:
     branches:
       - "**"
+    paths-ignore:
+      - '**/*.md'
+      - 'README*'
+      - 'docs/**'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.svg'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'README*'
+      - 'docs/**'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.svg'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   src-tests:
