@@ -36,8 +36,10 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
-      GPDB_LEGACY_BUILD_DIR: ${{ github.workspace }}/../pomelodb-legacy
-      POMELODB_INSTALL_PREFIX: ${{ github.workspace }}/../pomelodb
+      # Keep the legacy paths short: pg_basebackup intentionally rejects
+      # tablespace symlink targets longer than the tar link-name limit.
+      GPDB_LEGACY_BUILD_DIR: /tmp/pomelodb-legacy
+      POMELODB_INSTALL_PREFIX: /tmp/pomelodb
 
     steps:
       - name: Checkout
