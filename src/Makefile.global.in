@@ -525,8 +525,9 @@ prove_check = $(prove_installcheck)
 endif
 
 ifeq ($(enable_debug_extensions),yes)
+FAULTINJECTOR_SCRIPT = $(top_srcdir)/src/test/regress/scan_flaky_fault_injectors.sh
 define faultinjector_prep
-$(srcdir)/scan_flaky_fault_injectors.sh &&
+$(FAULTINJECTOR_SCRIPT) &&
 endef
 FAULTINJECTOR_OPTS := --load-extension=gp_inject_fault
 else
