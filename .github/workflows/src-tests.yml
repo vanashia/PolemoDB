@@ -109,6 +109,8 @@ jobs:
             ln -sf "$GITHUB_WORKSPACE/src/test/regress/$helper" \
               "$GPDB_LEGACY_BUILD_DIR/src/test/regress/$helper"
           done
+          ln -sfn "$GITHUB_WORKSPACE/src/test/regress/init_file" \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/regress/init_file"
 
           # GPTest.pm is generated from GPTest.pm.in by configure; it must
           # remain the build-tree version so it contains the configured DB version.
