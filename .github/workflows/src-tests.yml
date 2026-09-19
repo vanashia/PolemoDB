@@ -124,6 +124,12 @@ jobs:
           done
           ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/script" \
             "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/script"
+          # pg_regress resolves recursive source paths relative to its build
+          # directory while generating UAO row/column files.
+          ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/input" \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/input"
+          ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/output" \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/output"
 
           # isolation2 external-table cases reuse the regression data files,
           # while UAO source files are generated into these build-tree dirs by
@@ -189,7 +195,9 @@ jobs:
           export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
           source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
           export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          export LC_ALL=C
+          # The isolation2 expected files use the en_US collation order, and
+          # gp_collation needs a non-C locale to exercise OS locale lookup.
+          export LC_ALL=en_US.UTF-8
           coordinator_host="$(hostname -s)"
           ssh-keyscan -H "$coordinator_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
