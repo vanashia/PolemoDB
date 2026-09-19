@@ -125,6 +125,18 @@ jobs:
           ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/script" \
             "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/script"
 
+          # isolation2 external-table cases reuse the regression data files,
+          # while UAO source files are generated into these build-tree dirs by
+          # pg_regress.  The directories must exist before generation starts.
+          ln -sfn "$GITHUB_WORKSPACE/src/test/regress/data" \
+            "$GITHUB_WORKSPACE/src/test/isolation2/data"
+          mkdir -p \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/sql/uao" \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/expected/uao"
+          test -r "$GITHUB_WORKSPACE/src/test/isolation2/data/exttab_few_errors.data"
+          test -d "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/sql/uao"
+          test -d "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/expected/uao"
+
           # GPTest.pm is generated from GPTest.pm.in by configure; it must
           # remain the build-tree version so it contains the configured DB version.
           test -r "$GPDB_LEGACY_BUILD_DIR/src/test/regress/GPTest.pm"
