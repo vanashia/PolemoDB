@@ -84,7 +84,7 @@ test_connect(PG_FUNCTION_ARGS)
 	MemoryContext oldcxt;
 
 	oldcxt = MemoryContextSwitchTo(TopMemoryContext);
-	test_connection = walrcv_connect(conninfo, false, "walrcv_test", &err);
+	test_connection = walrcv_connect(conninfo, false, "walreceiver_test", &err);
 	if (!test_connection)
 		ereport(ERROR,
 				(errmsg("could not connect to the primary server: %s", err)));
@@ -360,7 +360,7 @@ test_xlog_ao(PG_FUNCTION_ARGS)
 
 		xrecoff = (uint32)startpoint;
 
-		conn = walrcv_connect(conninfo, false, "walrcv_test_ao_xlog", &err);
+		conn = walrcv_connect(conninfo, false, "walreceiver_test_ao_xlog", &err);
 		if (!conn)
 			ereport(ERROR,
 					(errmsg("could not connect to the primary server: %s", err)));

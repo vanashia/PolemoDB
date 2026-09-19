@@ -277,13 +277,10 @@ jobs:
             "$GITHUB_WORKSPACE/src/test/regress/heap_checksum_helper.so"
           test -r "$GITHUB_WORKSPACE/src/test/regress/heap_checksum_helper.so"
           echo "Single-runner source tests use coordinator, standby, primary, and mirror instances"
-          echo "Running the upstream regression schedules independently to preserve setup order"
+          echo "Running the upstream regression schedules in one database to preserve setup order"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
             REGRESS_OPTS="--dlpath=. --max-concurrent-tests=20 --init-file=$GITHUB_WORKSPACE/src/test/regress/init_file --outputdir=$GITHUB_WORKSPACE/src/test/regress" \
-            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule"
-          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
-            REGRESS_OPTS="--dlpath=. --max-concurrent-tests=20 --init-file=$GITHUB_WORKSPACE/src/test/regress/init_file --outputdir=$GITHUB_WORKSPACE/src/test/regress" \
-            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule"
+            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule --schedule=$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule"
 
       - name: Install database for excluded src/test suites
         run: |
