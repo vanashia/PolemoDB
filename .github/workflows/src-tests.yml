@@ -210,6 +210,9 @@ jobs:
             done
           done
           test -r "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml/gp_fastsequence_row.out"
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/fsync" all
+          ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/fsync/fsync_helper.so" \
+            "$GITHUB_WORKSPACE/src/test/regress/fsync_helper.so"
           single_node_schedule="$RUNNER_TEMP/single_node_schedule"
           cp "$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" "$single_node_schedule"
           cat >> "$single_node_schedule" <<'EOF'
