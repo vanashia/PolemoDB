@@ -111,6 +111,13 @@ jobs:
           done
           ln -sfn "$GITHUB_WORKSPACE/src/test/regress/init_file" \
             "$GPDB_LEGACY_BUILD_DIR/src/test/regress/init_file"
+          for init_file in \
+            init_file_isolation2 \
+            init_file_parallel_retrieve_cursor \
+            init_file_resgroup; do
+            ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/$init_file" \
+              "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/$init_file"
+          done
 
           # GPTest.pm is generated from GPTest.pm.in by configure; it must
           # remain the build-tree version so it contains the configured DB version.
