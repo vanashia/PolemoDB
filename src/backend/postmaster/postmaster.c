@@ -827,7 +827,11 @@ PostmasterMain(int argc, char *argv[])
 				break;
 
 			case 'C':
-				SetConfigOption("gp_contentid", optarg, PGC_POSTMASTER, PGC_S_ARGV);
+				/*
+				 * Keep the standard postgres -C <guc> interface.  Greenplum
+				 * content IDs are passed with the long --gp_contentid option.
+				 */
+				output_config_variable = pstrdup(optarg);
 				break;
 
 			case 'D':
