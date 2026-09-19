@@ -118,6 +118,12 @@ jobs:
             ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/$init_file" \
               "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/$init_file"
           done
+          for helper in sql_isolation_testcase.py global_sh_executor.sh; do
+            ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/$helper" \
+              "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/$helper"
+          done
+          ln -sfn "$GITHUB_WORKSPACE/src/test/isolation2/script" \
+            "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/script"
 
           # GPTest.pm is generated from GPTest.pm.in by configure; it must
           # remain the build-tree version so it contains the configured DB version.
