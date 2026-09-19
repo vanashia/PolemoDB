@@ -226,38 +226,12 @@ jobs:
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test/fsync" all
           ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/fsync/fsync_helper.so" \
             "$GITHUB_WORKSPACE/src/test/regress/fsync_helper.so"
-          single_node_schedule="$RUNNER_TEMP/single_node_schedule"
-          cp "$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" "$single_node_schedule"
-          parallel_tests="$RUNNER_TEMP/parallel_test_names"
-          awk '$1 == "test:" { for (i = 2; i <= NF; i++) print $i }' \
-            "$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" \
-            | sort -u > "$parallel_tests"
-          awk -v excluded="$parallel_tests" '
-            BEGIN {
-              while ((getline name < excluded) > 0)
-                scheduled[name] = 1
-              close(excluded)
-            }
-            /^test:/ {
-              line = "test:"
-              for (i = 2; i <= NF; i++) {
-                if (!scheduled[$i] && !emitted[$i]) {
-                  line = line " " $i
-                  emitted[$i] = 1
-                }
-              }
-              if (line != "test:")
-                print line
-              next
-            }
-            /^ignore:/ { next }
-            { print }
-          ' "$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule" \
-            >> "$single_node_schedule"
           echo "Single-runner source tests use coordinator, standby, primary, and mirror instances"
-          echo "Regression schedules are merged without duplicate test names"
+          echo "Running the upstream regression schedules independently to preserve setup order"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
-            REGRESS_SCHEDULE_OPTS="--schedule=$single_node_schedule"
+            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule"
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
+            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule"
 
       - name: Install database for excluded src/test suites
         run: |
