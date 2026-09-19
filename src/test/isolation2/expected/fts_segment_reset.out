@@ -58,10 +58,6 @@ select gp_inject_fault_infinite('postmaster_server_loop_no_sigkill', 'skip', dbi
 ----------
  
 (1 row)
- gp_wait_until_triggered_fault 
--------------------------------
- Success:                      
-(1 row)
 -- This should fail due to the seg0 in reset mode
 2&:create table fts_reset_t2(a int);  <waiting ...>
 
