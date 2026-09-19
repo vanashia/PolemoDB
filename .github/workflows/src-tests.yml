@@ -245,6 +245,10 @@ jobs:
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test/fsync" all
           ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/fsync/fsync_helper.so" \
             "$GITHUB_WORKSPACE/src/test/regress/fsync_helper.so"
+          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/walrep" all
+          ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/walrep/gplibpq.so" \
+            "$GITHUB_WORKSPACE/src/test/regress/gplibpq.so"
+          test -r "$GITHUB_WORKSPACE/src/test/regress/gplibpq.so"
           echo "Single-runner source tests use coordinator, standby, primary, and mirror instances"
           echo "Running the upstream regression schedules independently to preserve setup order"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
