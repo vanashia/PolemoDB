@@ -32,9 +32,10 @@ from gp_segment_configuration where role = 'p' and content = 0;
 from gp_segment_configuration where role = 'p' AND content = 0;
 1&:create table fts_reset_t(a int);
 
--- Ensure the first request has reached the injected fault before starting
--- the second request, otherwise it can complete before seg0 enters RESET.
-2:select gp_wait_until_triggered_fault('start_prepare', 1, dbid) from gp_segment_configuration where role = 'p' and content = 0;
+-- Ensure the postmaster has entered the delayed RESET path before starting
+-- the second request. Waiting for start_prepare alone is too early: it is
+-- triggered before the background-writer sleep that keeps seg0 in RESET.
+2:select gp_wait_until_triggered_fault('fault_in_background_writer_quickdie', 1, dbid) from gp_segment_configuration where role = 'p' and content = 0;
 -- This should fail due to the seg0 in reset mode
 2&:create table fts_reset_t2(a int);
 
