@@ -36,9 +36,10 @@ if(_regress_libpq_source_include EQUAL -1)
   message(FATAL_ERROR "regress helper clients must include libpq headers from the source tree")
 endif()
 string(FIND "${_makefile_global}"
-  "$(srcdir)/scan_flaky_fault_injectors.sh" _regress_faultinjector_script)
+  "FAULTINJECTOR_SCRIPT = $(top_srcdir)/src/test/regress/scan_flaky_fault_injectors.sh"
+  _regress_faultinjector_script)
 if(_regress_faultinjector_script EQUAL -1)
-  message(FATAL_ERROR "regress fault injector scan must use the source directory in VPATH builds")
+  message(FATAL_ERROR "fault injector scan must use the source tree in VPATH builds")
 endif()
 file(READ "${GPDB_SOURCE_DIR}/src/backend/catalog/Makefile" _catalog_makefile)
 string(FIND "${_catalog_makefile}" "$(call vpathsearch,$(GP_SYSVIEW_SQL))"
