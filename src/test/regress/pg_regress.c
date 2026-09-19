@@ -765,6 +765,7 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 	char		testtablespace[MAXPGPATH];
 	char		indir[MAXPGPATH];
 	char		cgroup_mnt_point[MAXPGPATH];
+	char		dest_subdir_path[MAXPGPATH];
 	replacements repls;
 	struct stat st;
 	int			ret;
@@ -792,8 +793,9 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 		exit(2);
 
 	/* also create the output directory if not present */
-	if (!directory_exists(dest_subdir))
-		make_directory(dest_subdir);
+	snprintf(dest_subdir_path, MAXPGPATH, "%s/%s", dest_dir, dest_subdir);
+	if (!directory_exists(dest_subdir_path))
+		make_directory(dest_subdir_path);
 
 	snprintf(testtablespace, MAXPGPATH, "%s/testtablespace", tablespacedir);
 
@@ -865,13 +867,22 @@ convert_sourcefiles_in(const char *source_subdir, const char *dest_dir, const ch
 		if (S_ISDIR(fst.st_mode))
 		{
 			char generate_uao_file[MAXPGPATH];
+			char source_dir[MAXPGPATH];
+			char destination_dir[MAXPGPATH];
 			snprintf(generate_uao_file, MAXPGPATH, "%s/%s",  srcfile, "GENERATE_ROW_AND_COLUMN_FILES");
+			snprintf(source_dir, MAXPGPATH, "%s/%s/%s", inputdir, source_subdir, *name);
+			snprintf(destination_dir, MAXPGPATH, "%s/%s/%s", dest_dir, dest_subdir, *name);
 
 			snprintf(srcfile, MAXPGPATH, "%s/%s", source_subdir, *name);
 			snprintf(destfile, MAXPGPATH, "%s/%s", dest_subdir, *name);
 
 			if (access(generate_uao_file, F_OK) != -1)
-				count += generate_uao_sourcefiles(srcfile, destfile, suffix, &repls);
+			{
+				if (!directory_exists(destination_dir))
+					make_directory(destination_dir);
+				count += generate_uao_sourcefiles(
+					source_dir, destination_dir, suffix, &repls);
+			}
 			else
 				count += convert_sourcefiles_in(srcfile, dest_dir, destfile, suffix);
 
