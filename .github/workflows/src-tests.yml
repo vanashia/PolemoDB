@@ -210,10 +210,17 @@ jobs:
             done
           done
           test -r "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml/gp_fastsequence_row.out"
-          echo "Single-node source tests use parallel_schedule and mirrorless_schedule"
+          single_node_schedule="$RUNNER_TEMP/single_node_schedule"
+          cp "$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" "$single_node_schedule"
+          cat >> "$single_node_schedule" <<'EOF'
+
+          # Greenplum-specific smoke test that is safe without segment mirrors.
+          test: gp_dispatch_keepalives
+          EOF
+          echo "Single-node source tests use parallel_schedule plus gp_dispatch_keepalives"
           echo "Mirror/HA fault-injection tests remain for a mirrored test environment"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
-            REGRESS_SCHEDULE_OPTS="--schedule=$GITHUB_WORKSPACE/src/test/regress/parallel_schedule --schedule=$GITHUB_WORKSPACE/src/test/regress/mirrorless_schedule"
+            REGRESS_SCHEDULE_OPTS="--schedule=$single_node_schedule"
 
       - name: Install database for excluded src/test suites
         run: |
