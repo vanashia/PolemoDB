@@ -146,9 +146,13 @@ jobs:
           coordinator_host="$(hostname -s)"
           ssh-keyscan -H "$coordinator_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
           mkdir -p "$RUNNER_TEMP/pomelodb-coordinator" \
+            "$RUNNER_TEMP/pomelodb-standby" \
             "$RUNNER_TEMP/pomelodb-segment0" \
             "$RUNNER_TEMP/pomelodb-segment1" \
-            "$RUNNER_TEMP/pomelodb-segment2"
+            "$RUNNER_TEMP/pomelodb-segment2" \
+            "$RUNNER_TEMP/pomelodb-mirror0" \
+            "$RUNNER_TEMP/pomelodb-mirror1" \
+            "$RUNNER_TEMP/pomelodb-mirror2"
           test -r "$POMELODB_INSTALL_PREFIX/bin/lib/gp_bash_version.sh"
           cat > "$RUNNER_TEMP/hostfile_gpinitsystem" <<EOF
           $coordinator_host
@@ -162,9 +166,18 @@ jobs:
             $RUNNER_TEMP/pomelodb-segment1
             $RUNNER_TEMP/pomelodb-segment2
           )
+          MIRROR_PORT_BASE=7000
+          declare -a MIRROR_DATA_DIRECTORY=(
+            $RUNNER_TEMP/pomelodb-mirror0
+            $RUNNER_TEMP/pomelodb-mirror1
+            $RUNNER_TEMP/pomelodb-mirror2
+          )
           COORDINATOR_HOSTNAME=$coordinator_host
           COORDINATOR_DIRECTORY=$RUNNER_TEMP/pomelodb-coordinator
           COORDINATOR_PORT=5432
+          STANDBY_HOSTNAME=$coordinator_host
+          STANDBY_PORT=5433
+          STANDBY_DATADIR=$RUNNER_TEMP/pomelodb-standby
           TRUSTED_SHELL=ssh
           ENCODING=UNICODE
           EOF
@@ -215,13 +228,34 @@ jobs:
             "$GITHUB_WORKSPACE/src/test/regress/fsync_helper.so"
           single_node_schedule="$RUNNER_TEMP/single_node_schedule"
           cp "$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" "$single_node_schedule"
-          cat >> "$single_node_schedule" <<'EOF'
-
-          # Greenplum-specific smoke test that is safe without segment mirrors.
-          test: gp_dispatch_keepalives
-          EOF
-          echo "Single-node source tests use parallel_schedule plus gp_dispatch_keepalives"
-          echo "Mirror/HA fault-injection tests remain for a mirrored test environment"
+          parallel_tests="$RUNNER_TEMP/parallel_test_names"
+          awk '$1 == "test:" { for (i = 2; i <= NF; i++) print $i }' \
+            "$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" \
+            | sort -u > "$parallel_tests"
+          awk -v excluded="$parallel_tests" '
+            BEGIN {
+              while ((getline name < excluded) > 0)
+                scheduled[name] = 1
+              close(excluded)
+            }
+            /^test:/ {
+              line = "test:"
+              for (i = 2; i <= NF; i++) {
+                if (!scheduled[$i] && !emitted[$i]) {
+                  line = line " " $i
+                  emitted[$i] = 1
+                }
+              }
+              if (line != "test:")
+                print line
+              next
+            }
+            /^ignore:/ { next }
+            { print }
+          ' "$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule" \
+            >> "$single_node_schedule"
+          echo "Single-runner source tests use coordinator, standby, primary, and mirror instances"
+          echo "Regression schedules are merged without duplicate test names"
           make -C "$GPDB_LEGACY_BUILD_DIR/src/test" installcheck \
             REGRESS_SCHEDULE_OPTS="--schedule=$single_node_schedule"
 
