@@ -71,7 +71,6 @@ jobs:
             -DGPDB_LEGACY_BUILD_DIR="$GPDB_LEGACY_BUILD_DIR" \
             -DGPDB_CONFIGURE_ENV="CC=ccache gcc;CXX=ccache g++;CFLAGS=-O0;CXXFLAGS=-O0;LLVM_CONFIG=llvm-config-14;CLANG=clang-14" \
             -DGPDB_ENABLE_NATIVE_TARGETS=OFF \
-            -DPOMELODB_WITH_DUCKDB=OFF \
             -DGPDB_ENABLE_TAP_TESTS=ON \
             -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
             -DGPDB_WITH_LLVM=ON \
