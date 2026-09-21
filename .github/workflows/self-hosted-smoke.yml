@@ -34,20 +34,14 @@ jobs:
           clean: true
           submodules: false
 
-      - name: Install native build dependencies
+      - name: Verify native build tools
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential ccache cmake ninja-build pkg-config flex bison \
-            libapr1-dev libcurl4-openssl-dev libevent-dev libyaml-dev \
-            libxerces-c-dev libxml2-dev libkrb5-dev libperl-dev python3-dev \
-            libreadline-dev zlib1g-dev libbz2-dev libzstd-dev libssl-dev
-
-      - name: Verify native build tools
-        shell: bash
-        run: command -v cmake ninja ccache pkg-config flex bison
+          command -v cmake ninja ccache pkg-config flex bison
+          command -v curl-config
+          test -x /usr/bin/apr-1-config
+          pkg-config --exists libcurl apr-1 libevent yaml-0.1
 
       - name: Configure runner-local ccache
         shell: bash

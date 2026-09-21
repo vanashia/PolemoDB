@@ -1,4 +1,5 @@
 include(CheckIncludeFile)
+include(CheckCSourceCompiles)
 include(CheckSymbolExists)
 include(FindPackageHandleStandardArgs)
 
@@ -11,6 +12,18 @@ find_package(PkgConfig QUIET)
 # shm_open() is available.  Without this native probe macOS would generate a
 # server that rejects its own freshly initialized configuration.
 check_symbol_exists(shm_open "sys/mman.h" GPDB_HAVE_SHM_OPEN)
+
+# SysV semaphore headers do not consistently declare union semun.  The
+# legacy configure probe detects this type and sysv_sema.c supplies the
+# fallback definition when it is absent, so keep the native CMake path
+# consistent with that behavior on Linux and other SysV platforms.
+if(NOT WIN32)
+check_c_source_compiles("#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+int main(void) { union semun value; value.val = 0; return value.val; }"
+  GPDB_HAVE_UNION_SEMUN)
+endif()
 
 if(GPDB_WITH_ZLIB)
   find_package(ZLIB REQUIRED)
