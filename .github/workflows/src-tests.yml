@@ -150,9 +150,9 @@ jobs:
             echo "PGDATABASE=$PGDATABASE"
             echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
           } >> "$GITHUB_ENV"
-          psql -X -v ON_ERROR_STOP=1 -Atqc \
+          PGOPTIONS='-c optimizer=off' psql -X -v ON_ERROR_STOP=1 -Atqc \
             "select current_setting('gp_role'), current_setting('gp_contentid')"
-          psql -X -v ON_ERROR_STOP=1 -Atqc \
+          PGOPTIONS='-c optimizer=off' psql -X -v ON_ERROR_STOP=1 -Atqc \
             "select current_setting('gp_role'), count(*) from gp_segment_configuration where status='u'"
 
       - name: Run src/test/regress schedule
