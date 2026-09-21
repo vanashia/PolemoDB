@@ -34,6 +34,8 @@ private:
 	const WCHAR *m_w_str_buffer;
 
 public:
+	using CWStringBase::Equals;
+
 	// ctors
 	CWStringConst(const WCHAR *w_str_buffer);
 	CWStringConst(CMemoryPool *mp, const WCHAR *w_str_buffer);

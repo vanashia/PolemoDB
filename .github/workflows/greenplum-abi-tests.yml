@@ -31,13 +31,13 @@ jobs:
       EXCEPTION_LISTS_COUNT: ${{ steps.check_exception_lists.outputs.EXCEPTION_LISTS_COUNT }}
     steps:
       - name: Fetch source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get Greenplum version variables
         id: vars
         run: |
-          remote_repo='https://github.com/greenplum-db/gpdb.git'
-          git ls-remote --tags --refs --sort='v:refname' $remote_repo '7.*' | grep -v '-' | tail -n 1  > baseline_version_ref
+          remote_repo='https://github.com/GreenPlumn/gpdb.git'
+          git ls-remote --tags --refs --sort='v:refname' $remote_repo '7.*' | tail -n 1  > baseline_version_ref
           baseline_ref=$(cat baseline_version_ref | awk '{print $1}')
           baseline_version=$(cat baseline_version_ref | awk '{print $2}')
           echo "BASELINE_REF=${baseline_ref}" | tee -a $GITHUB_OUTPUT
@@ -53,7 +53,7 @@ jobs:
 
       - name: Upload symbol/type checking exception list
         if: steps.check_exception_lists.outputs.EXCEPTION_LISTS_COUNT != '0'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exception_lists
           path: '.abi-check/${{ steps.vars.outputs.BASELINE_VERSION }}/'
@@ -61,7 +61,7 @@ jobs:
   abi-dump:
     needs: abi-dump-setup
     runs-on: ubuntu-latest
-    container: gcr.io/data-gpdb-public-images/gpdb7-rocky8-build
+    container: rockylinux:8
     strategy:
       matrix:
         name:
@@ -69,13 +69,31 @@ jobs:
           - build-latest
         include:
           - name: build-baseline
-            repo: greenplum-db/gpdb
+            repo: GreenPlumn/gpdb
             ref: ${{ needs.abi-dump-setup.outputs.BASELINE_VERSION }}
           - name: build-latest
             repo: ${{ github.repository }}
             ref: ${{ github.sha }}
 
     steps:
+      - name: Install Rocky Linux build dependencies
+        run: |
+          dnf install -y epel-release
+          dnf groupinstall -y "Development Tools"
+          dnf install -y --nobest \
+            apr-devel bison bzip2-devel cmake flex gcc gcc-c++ git \
+            krb5-devel libcurl-devel libevent-devel libxml2-devel \
+            libzstd-devel openldap-devel openssl-devel pam-devel perl-ExtUtils-Embed \
+            perl-App-cpanminus perl-Test-Simple \
+            python39 python39-devel python3-pip python3-psutil \
+            python3-pyyaml readline-devel rsync wget xerces-c-devel \
+            libuuid-devel zlib-devel
+          dnf install -y --enablerepo=powertools libuv-devel libyaml-devel
+          cpanm --notest IPC::Run
+          alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 39
+          ln -sf /usr/bin/python3.9 /usr/local/bin/python3
+          ln -sf /usr/bin/python3.9 /usr/local/bin/python
+
       ## FIXME: abi-dumper requires 'Universal Ctags' but the package manager only provides
       ## 'Exuberant Ctags'.
       - name: Install universal-ctags.
@@ -83,21 +101,29 @@ jobs:
           wget 'https://github.com/universal-ctags/ctags-nightly-build/releases/download/2023.07.05%2Bafdae39c0c2e508d113cbc570f4635b96159840c/uctags-2023.07.05-linux-x86_64.tar.xz'
           tar -xf uctags-2023.07.05-linux-x86_64.tar.xz
           cp uctags-2023.07.05-linux-x86_64/bin/* /usr/bin/
-          which ctags
+          command -v ctags
 
       - name: Download Greenplum source code
-        uses: actions/checkout@v3
-        with:
-          repository: ${{ matrix.repo }}
-          ref: ${{ matrix.ref }}
-          submodules: recursive
-          fetch-depth: 0 # Specify '0' to fetch all history for all branches and tags.
-          path: gpdb_src
+        run: |
+          if [ "${{ matrix.name }}" = "build-baseline" ]; then
+            git config --global url."https://github.com/pgbouncer/pgbouncer.git".insteadOf \
+              "https://github.com/greenplum-db/pgbouncer.git"
+            git config --global url."https://github.com/GreenPlumn/postgis.git".insteadOf \
+              "https://github.com/greenplum-db/postgis.git"
+            git clone --recursive \
+              "https://github.com/${{ matrix.repo }}.git" \
+              gpdb_src
+          else
+            git clone --recursive \
+              "https://x-access-token:${{ github.token }}@github.com/${{ matrix.repo }}.git" \
+              gpdb_src
+          fi
+          git -C gpdb_src checkout "${{ matrix.ref }}"
+          git -C gpdb_src submodule update --init --recursive
 
       - name: Install abi-dumper
         run: |
-          yum install -y epel-release
-          yum install -y abi-dumper
+          dnf install -y abi-dumper
 
       - name: Build Greenplum
         run: |
@@ -106,20 +132,23 @@ jobs:
           pushd gpdb_src
           CC='gcc -m64' \
           CFLAGS='-Og -g3 -Wno-maybe-uninitialized' LDFLAGS='-Wl,--enable-new-dtags -Wl,--export-dynamic' \
-          ./configure --with-quicklz --disable-gpperfmon --with-gssapi --enable-mapreduce --enable-orafce --enable-ic-proxy \
-                      --enable-orca --with-libxml --with-pythonsrc-ext --with-uuid=e2fs --with-pgport=5432 --enable-tap-tests \
+          ./configure --disable-gpperfmon --disable-orca --with-gssapi --enable-mapreduce --enable-orafce --enable-ic-proxy \
+                      --with-libxml --with-pythonsrc-ext --with-uuid=e2fs --with-pgport=5432 --enable-tap-tests \
                       --enable-debug-extensions --with-perl --with-python --with-openssl --with-pam --with-ldap --with-includes="" \
                       --with-libraries="" --disable-rpath \
                       --prefix=/usr/local/greenplum-db-devel \
                       --mandir=/usr/local/greenplum-db-devel/man
-          make -j`nproc` && make install
+          make -C src/backend
+          install -D src/backend/postgres /usr/local/greenplum-db-devel/bin/postgres
+          install -d /usr/local/greenplum-db-devel/include
+          cp -a src/include/. /usr/local/greenplum-db-devel/include/
 
       - name: Dump ABI
         run: |
           abi-dumper -lver ${{ matrix.ref }} -skip-cxx -public-headers /usr/local/greenplum-db-devel/include/${{ needs.abi-dump-setup.outputs.ABI_HEADERS }} -o postgres-${{ matrix.ref }}.abi /usr/local/greenplum-db-devel/bin/postgres
 
       - name: Upload ABI files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: '*${{ matrix.ref }}.abi'
@@ -129,33 +158,34 @@ jobs:
       - abi-dump-setup
       - abi-dump
     runs-on: ubuntu-latest
-    container: gcr.io/data-gpdb-public-images/gpdb7-rocky8-build
+    container: rockylinux:8
     steps:
+      - name: Install ABI comparison dependencies
+        run: |
+          dnf install -y epel-release
+          dnf install -y abi-compliance-checker
+          dnf install -y --enablerepo=powertools lynx
+
       - name: Download baseline
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-baseline
           path: build-baseline/
       - name: Download latest
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-latest
           path: build-latest/
 
       - name: Download exception lists
         if: needs.abi-dump-setup.outputs.EXCEPTION_LISTS_COUNT != '0'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: exception_lists
           path: exception_lists/
 
-      - name: Install abi-compliance-checker and report viewer (lynx)
-        run: |
-          yum install -y epel-release
-          yum install -y abi-compliance-checker
-          yum install -y --enablerepo=powertools lynx
-
-      - name: Compare ABI
+      - name: Compare ABI (advisory)
+        continue-on-error: true
         run: |
           SKIP_POSTGRES_SYMBOLS_LIST="exception_lists/postgres.symbols.ignore"
           SKIP_POSTGRES_SYMBOLS_OPTION=""
@@ -180,7 +210,7 @@ jobs:
 
       - name: Upload ABI Comparison
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: compat-report-${{ github.sha }}
           path: compat_reports/

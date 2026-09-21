@@ -1,5 +1,6 @@
 # gpMgmt/bin/stream/Makefile
 
+subdir = gpMgmt/bin/stream
 top_builddir=../../..
 include $(top_builddir)/src/Makefile.global
 

@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Manage one local PomeloDB instance from the installed pomelodb.conf."""
+
+import os
+import shlex
+import subprocess
+import sys
+
+
+CONFIG_NAME = "pomelodb.conf"
+MANAGED_BEGIN = "# BEGIN POMELODB MANAGED LOGGING"
+MANAGED_END = "# END POMELODB MANAGED LOGGING"
+ALLOWED_KEYS = {
+    "data_directory", "log_directory", "initdb_options", "server_options",
+    "stop_mode", "wait",
+}
+
+
+class ConfigError(Exception):
+    pass
+
+
+def installation_root():
+    return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+
+def resolve_path(value, root):
+    if not os.path.isabs(value):
+        value = os.path.join(root, value)
+    return os.path.abspath(os.path.expanduser(value))
+
+
+def parse_config(root):
+    config_path = os.path.join(root, CONFIG_NAME)
+    values = {}
+    try:
+        with open(config_path, encoding="utf-8") as config_file:
+            for line_number, raw_line in enumerate(config_file, 1):
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    raise ConfigError("%s:%d: expected key=value" %
+                                      (config_path, line_number))
+                key, value = line.split("=", 1)
+                key, value = key.strip(), value.strip()
+                if key not in ALLOWED_KEYS:
+                    raise ConfigError("%s:%d: unsupported setting %s" %
+                                      (config_path, line_number, key))
+                if key in values:
+                    raise ConfigError("%s:%d: duplicate setting %s" %
+                                      (config_path, line_number, key))
+                values[key] = value
+    except OSError as error:
+        raise ConfigError("cannot read %s: %s" % (config_path, error))
+
+    for key in ("data_directory", "log_directory"):
+        if not values.get(key):
+            raise ConfigError("%s must be set in %s" % (key, config_path))
+        values[key] = resolve_path(values[key], root)
+
+    common_path = os.path.commonpath(
+        [values["data_directory"], values["log_directory"]])
+    if common_path in (values["data_directory"], values["log_directory"]):
+        raise ConfigError("data_directory and log_directory must be separate")
+
+    values.setdefault("initdb_options", "")
+    values.setdefault("server_options", "")
+    values.setdefault("stop_mode", "fast")
+    if values["stop_mode"] not in ("smart", "fast", "immediate"):
+        raise ConfigError("stop_mode must be smart, fast, or immediate")
+    values.setdefault("wait", "true")
+    if values["wait"].lower() not in ("true", "false"):
+        raise ConfigError("wait must be true or false")
+    values["wait"] = values["wait"].lower() == "true"
+    return values
+
+
+def command_path(root, name):
+    return os.path.join(root, "bin", name)
+
+
+def run(command):
+    try:
+        return subprocess.call(command)
+    except OSError as error:
+        sys.stderr.write("pomelodb: cannot run %s: %s\n" % (command[0], error))
+        return 1
+
+
+def configure_logging(values):
+    data_directory = values["data_directory"]
+    config_path = os.path.join(data_directory, "postgresql.conf")
+    if not os.path.isfile(config_path):
+        raise ConfigError("%s does not exist; run pomelodb init first" % config_path)
+
+    with open(config_path, encoding="utf-8") as config_file:
+        lines = config_file.readlines()
+    retained = []
+    in_managed_block = False
+    for line in lines:
+        if line.rstrip("\n") == MANAGED_BEGIN:
+            in_managed_block = True
+            continue
+        if line.rstrip("\n") == MANAGED_END:
+            in_managed_block = False
+            continue
+        if not in_managed_block:
+            retained.append(line)
+    if retained and not retained[-1].endswith("\n"):
+        retained[-1] += "\n"
+    log_directory = values["log_directory"].replace("'", "''")
+    retained.extend([
+        "\n", MANAGED_BEGIN + "\n",
+        "logging_collector = on\n",
+        "log_directory = '%s'\n" % log_directory,
+        "log_filename = 'pomelodb-%%Y-%%m-%%d_%%H%%M%%S.log'\n",
+        MANAGED_END + "\n",
+    ])
+    with open(config_path, "w", encoding="utf-8") as config_file:
+        config_file.writelines(retained)
+
+
+def init(root, values):
+    os.makedirs(values["log_directory"], mode=0o750, exist_ok=True)
+    command = [command_path(root, "initdb"), "-D", values["data_directory"]]
+    command.extend(shlex.split(values["initdb_options"]))
+    result = run(command)
+    if result == 0:
+        configure_logging(values)
+    return result
+
+
+def start(root, values):
+    os.makedirs(values["log_directory"], mode=0o750, exist_ok=True)
+    configure_logging(values)
+    command = [command_path(root, "pg_ctl"), "start", "-D", values["data_directory"],
+               "-l", os.path.join(values["log_directory"], "pomelodb-startup.log")]
+    if values["server_options"]:
+        command.extend(["-o", values["server_options"]])
+    if values["wait"]:
+        command.append("-w")
+    return run(command)
+
+
+def stop(root, values):
+    command = [command_path(root, "pg_ctl"), "stop", "-D", values["data_directory"],
+               "-m", values["stop_mode"]]
+    if values["wait"]:
+        command.append("-w")
+    return run(command)
+
+
+def reload(root, values):
+    configure_logging(values)
+    return run([command_path(root, "pg_ctl"), "reload", "-D", values["data_directory"]])
+
+
+def status(root, values):
+    return run([command_path(root, "pg_ctl"), "status", "-D", values["data_directory"]])
+
+
+def usage():
+    sys.stderr.write("usage: pomelodb {init|start|stop|reload|status}\n")
+
+
+def main(argv):
+    if len(argv) != 2 or argv[1] not in ("init", "start", "stop", "reload", "status"):
+        usage()
+        return 2
+    try:
+        root = installation_root()
+        values = parse_config(root)
+        return {
+            "init": init, "start": start, "stop": stop,
+            "reload": reload, "status": status,
+        }[argv[1]](root, values)
+    except ConfigError as error:
+        sys.stderr.write("pomelodb: %s\n" % error)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

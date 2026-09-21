@@ -16,7 +16,8 @@ PROGRAMS= analyzedb gpactivatestandby gpaddmirrors gpcheckcat gpcheckperf \
 	gpcheckresgroupimpl gpconfig gpdeletesystem gpexpand gpinitstandby \
 	gpinitsystem gpload gpload.py gplogfilter gpmovemirrors \
 	gprecoverseg gpreload gpsync gpsd gpssh gpssh-exkeys gpstart \
-	gpstate gpstop minirepro gpmemwatcher gpmemreport gpcheckresgroupv2impl
+	gpstate gpstop minirepro gpmemwatcher gpmemreport gpcheckresgroupv2impl \
+	pomelodb
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)/lib'
@@ -31,12 +32,15 @@ installprograms: installdirs
 		cd $(DESTDIR)$(bindir)/lib/ && $(LN_S) ../gpcheckcat gpcheckcat; \
 	fi
 	$(INSTALL_DATA) gpload.bat '$(DESTDIR)$(bindir)/gpload.bat'
+	$(MKDIR_P) '$(DESTDIR)$(prefix)'
+	$(INSTALL_DATA) pomelodb.conf '$(DESTDIR)$(prefix)/pomelodb.conf'
 
 uninstall:
 	for file in $(PROGRAMS); do \
 		rm -f '$(DESTDIR)$(bindir)/'$$file ; \
 	done
 	rm -f '$(DESTDIR)$(bindir)/gpload.bat'
+	rm -f '$(DESTDIR)$(prefix)/pomelodb.conf'
 
 #
 # SOURCE DIRECTORIES
