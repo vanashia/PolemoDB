@@ -100,6 +100,8 @@ option(GPDB_SKIP_CONFIGURE "Only validate the CMake interface; do not run config
 option(GPDB_ENABLE_NATIVE_TARGETS "Build native CMake library targets" ON)
 option(GPDB_BUILD_NATIVE_TARGETS_WITH_GPDB
        "Make the full gpdb target also build the optional native frontend subset" OFF)
+option(POMELODB_WITH_DUCKDB
+       "Build the embedded DuckDB executor and SQL entry point" ON)
 
 if(GPDB_ENABLE_NATIVE_TARGETS)
   enable_language(C CXX)
@@ -177,6 +179,9 @@ if(GPDB_ENABLE_NATIVE_TARGETS)
     link_directories(${_gpdb_native_library_dirs})
   endif()
   include("${CMAKE_SOURCE_DIR}/cmake/GPDBNativeLibraries.cmake")
+  if(POMELODB_WITH_DUCKDB)
+    include("${CMAKE_SOURCE_DIR}/cmake/PomeloDuckDB.cmake")
+  endif()
 endif()
 
 set(_configure_args "--prefix=${CMAKE_INSTALL_PREFIX}")

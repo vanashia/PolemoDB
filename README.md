@@ -77,6 +77,28 @@ pomelodb stop
 a shell script. The manager configures PostgreSQL logging so that runtime logs
 go to the configured log directory, separately from the data directory.
 
+## Embedded DuckDB SQL executor
+
+PomeloDB also embeds DuckDB as a native CMake dependency for local SQL
+execution. The DuckDB source is tracked as a git submodule, so clone the
+repository recursively or run `git submodule update --init --recursive` before
+configuring. The integration is enabled by default and can be disabled with
+`-DPOMELODB_WITH_DUCKDB=OFF`.
+
+```sh
+cmake -S . -B build-duckdb -G Ninja \
+  -DGPDB_SKIP_CONFIGURE=ON \
+  -DGPDB_ENABLE_NATIVE_TARGETS=ON \
+  -DPOMELODB_WITH_DUCKDB=ON
+cmake --build build-duckdb --target pomelodb-sql --parallel
+
+build-duckdb/pomelodb-sql 'SELECT 1 + 1 AS answer'
+printf 'SELECT 42 AS answer\n' | build-duckdb/pomelodb-sql
+```
+
+This is an embedded/local SQL entry point backed by DuckDB; it does not replace
+the existing distributed PomeloDB coordinator and segment execution path.
+
 ## Tests
 
 After configuring the build, run the CMake tests and the PomeloDB manager tests:
