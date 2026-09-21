@@ -44,6 +44,7 @@ class PomeloDbCommandTest(unittest.TestCase):
         for data_dir in (coordinator, segment):
             (data_dir / "postgresql.conf").write_text("# test\n", encoding="utf-8")
         self._write_fake_binary("pg_ctl", "printf '%s\\n' \"$*\" >> \"$POMELODB_TEST_LOG\"")
+        self._write_fake_binary("postgres", "cat >/dev/null")
 
         environment = os.environ.copy()
         environment["POMELODB_TEST_LOG"] = str(self.command_log)
@@ -104,6 +105,7 @@ class PomeloDbCommandTest(unittest.TestCase):
             "segment_data_directories=%s\nlog_directory=%s\nstop_mode=fast\n"
             % (coordinator, segment, log_dir), encoding="utf-8")
         self._write_fake_binary("pg_ctl", "printf '%s\\n' \"$*\" >> \"$POMELODB_TEST_LOG\"")
+        self._write_fake_binary("postgres", "cat >/dev/null")
 
         environment = os.environ.copy()
         environment["POMELODB_TEST_LOG"] = str(self.command_log)

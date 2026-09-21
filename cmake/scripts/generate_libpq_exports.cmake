@@ -1,0 +1,27 @@
+if(NOT DEFINED GPDB_EXPORTS_SOURCE OR NOT DEFINED GPDB_MAC_OUTPUT
+   OR NOT DEFINED GPDB_LINUX_OUTPUT)
+  message(FATAL_ERROR "libpq export generation arguments are required")
+endif()
+
+file(READ "${GPDB_EXPORTS_SOURCE}" _exports)
+string(REPLACE "\n" ";" _export_lines "${_exports}")
+set(_mac_symbols "")
+set(_linux_symbols "")
+foreach(_line IN LISTS _export_lines)
+  string(STRIP "${_line}" _line)
+  if(NOT _line OR _line MATCHES "^#")
+    continue()
+  endif()
+  string(REGEX MATCH "^[A-Za-z_][A-Za-z0-9_]*" _symbol "${_line}")
+  if(_symbol)
+    string(APPEND _mac_symbols "_${_symbol}\n")
+    string(APPEND _linux_symbols "    ${_symbol};\n")
+  endif()
+endforeach()
+
+get_filename_component(_mac_directory "${GPDB_MAC_OUTPUT}" DIRECTORY)
+get_filename_component(_linux_directory "${GPDB_LINUX_OUTPUT}" DIRECTORY)
+file(MAKE_DIRECTORY "${_mac_directory}" "${_linux_directory}")
+file(WRITE "${GPDB_MAC_OUTPUT}" "${_mac_symbols}")
+file(WRITE "${GPDB_LINUX_OUTPUT}"
+  "{\n  global:\n${_linux_symbols}  local: *;\n};\n")

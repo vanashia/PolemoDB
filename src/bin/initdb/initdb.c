@@ -1006,13 +1006,13 @@ test_config_settings(void)
 		if (n_buffers > 0)
 			test_buffs = n_buffers;
 
-		snprintf(cmd, sizeof(cmd),
-				 "\"%s\" --boot -x0 %s "
-				 "-c max_connections=%d "
-				 "-c shared_buffers=%d "
-				 "-c dynamic_shared_memory_type=%s "
-				 "< \"%s\" > \"%s\" 2>&1",
-				 backend_exec, boot_options,
+			snprintf(cmd, sizeof(cmd),
+					 "\"%s\" --boot -D \"%s\" -x0 %s "
+					 "-c max_connections=%d "
+					 "-c shared_buffers=%d "
+					 "-c dynamic_shared_memory_type=%s "
+					 "< \"%s\" > \"%s\" 2>&1",
+					 backend_exec, pg_data, boot_options,
 				 test_conns, test_buffs,
 				 dynamic_shared_memory_type,
 				 DEVNULL, DEVNULL);
@@ -1045,13 +1045,13 @@ test_config_settings(void)
 			break;
 		}
 
-		snprintf(cmd, sizeof(cmd),
-				 "\"%s\" --boot -x0 %s "
-				 "-c max_connections=%d "
-				 "-c shared_buffers=%d "
-				 "-c dynamic_shared_memory_type=%s "
-				 "< \"%s\" > \"%s\" 2>&1",
-				 backend_exec, boot_options,
+			snprintf(cmd, sizeof(cmd),
+					 "\"%s\" --boot -D \"%s\" -x0 %s "
+					 "-c max_connections=%d "
+					 "-c shared_buffers=%d "
+					 "-c dynamic_shared_memory_type=%s "
+					 "< \"%s\" > \"%s\" 2>&1",
+					 backend_exec, pg_data, boot_options,
 				 n_connections, test_buffs,
 				 dynamic_shared_memory_type,
 				 DEVNULL, DEVNULL);
@@ -1471,10 +1471,11 @@ bootstrap_template1(void)
 	/* Also ensure backend isn't confused by this environment var: */
 	unsetenv("PGCLIENTENCODING");
 
-	snprintf(cmd, sizeof(cmd),
-			 "\"%s\" --boot -x1 -X %u %s %s %s",
-			 backend_exec,
-			 wal_segment_size_mb * (1024 * 1024),
+		snprintf(cmd, sizeof(cmd),
+				 "\"%s\" --boot -D \"%s\" -x1 -X %u %s %s %s",
+				 backend_exec,
+				 pg_data,
+				 wal_segment_size_mb * (1024 * 1024),
 			 data_checksums ? "-k" : "",
 			 boot_options,
 			 debug ? "-d 5" : "");
@@ -3265,8 +3266,8 @@ initialize_data_directory(void)
 	fflush(stdout);
 
 	snprintf(cmd, sizeof(cmd),
-			 "\"%s\" %s template1 >%s",
-			 backend_exec, backend_options,
+				 "\"%s\" %s -D \"%s\" template1 >%s",
+				 backend_exec, backend_options, pg_data,
 			 DEVNULL);
 
 	PG_CMD_OPEN;

@@ -1,0 +1,30 @@
+if(NOT DEFINED SOURCE_DIR OR NOT DEFINED OUTPUT)
+  message(FATAL_ERROR "SOURCE_DIR and OUTPUT are required")
+endif()
+set(_languages
+  arabic arabic danish danish dutch dutch english english finnish finnish french french
+  german german hungarian hungarian indonesian indonesian irish irish italian italian
+  lithuanian lithuanian nepali nepali norwegian norwegian portuguese portuguese
+  romanian romanian russian english spanish spanish swedish swedish tamil tamil
+  turkish turkish)
+file(READ "${SOURCE_DIR}/snowball_func.sql.in" _func_sql)
+file(READ "${SOURCE_DIR}/snowball.sql.in" _template_sql)
+file(WRITE "${OUTPUT}" "-- Language-specific snowball dictionaries\n${_func_sql}")
+list(LENGTH _languages _language_count)
+math(EXPR _last_index "${_language_count} - 1")
+foreach(_index RANGE 0 ${_last_index} 2)
+  math(EXPR _ascii_index "${_index} + 1")
+  list(GET _languages ${_index} _language)
+  list(GET _languages ${_ascii_index} _ascii_language)
+  set(_stopwords "")
+  if(EXISTS "${SOURCE_DIR}/stopwords/${_language}.stop")
+    set(_stopwords ", StopWords=${_language}")
+  endif()
+  string(REPLACE "_LANGNAME_" "${_language}" _sql "${_template_sql}")
+  string(REPLACE "_DICTNAME_" "${_language}_stem" _sql "${_sql}")
+  string(REPLACE "_CFGNAME_" "${_language}" _sql "${_sql}")
+  string(REPLACE "_ASCDICTNAME_" "${_ascii_language}_stem" _sql "${_sql}")
+  string(REPLACE "_NONASCDICTNAME_" "${_language}_stem" _sql "${_sql}")
+  string(REPLACE "_STOPWORDS_" "${_stopwords}" _sql "${_sql}")
+  file(APPEND "${OUTPUT}" "${_sql}")
+endforeach()

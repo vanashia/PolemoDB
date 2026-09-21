@@ -1,0 +1,13 @@
+file(WRITE "${OUTPUT}"
+  "#define PGBINDIR \"${BINDIR}\"\n"
+  "#define PGSHAREDIR \"${DATADIR}\"\n"
+  "#define SYSCONFDIR \"${SYSCONFDIR}\"\n"
+  "#define INCLUDEDIR \"${INCLUDEDIR}\"\n"
+  "#define PKGINCLUDEDIR \"${PKGINCLUDEDIR}\"\n"
+  "#define INCLUDEDIRSERVER \"${INCLUDEDIRSERVER}\"\n"
+  "#define LIBDIR \"${LIBDIR}\"\n"
+  "#define PKGLIBDIR \"${PKGLIBDIR}\"\n"
+  "#define LOCALEDIR \"${LOCALEDIR}\"\n"
+  "#define DOCDIR \"${DOCDIR}\"\n"
+  "#define HTMLDIR \"${HTMLDIR}\"\n"
+  "#define MANDIR \"${MANDIR}\"\n")

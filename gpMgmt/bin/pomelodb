@@ -2,6 +2,7 @@
 """Manage a local PomeloDB instance from the installed pomelodb.conf."""
 
 import os
+import socket
 import subprocess
 import sys
 
@@ -9,9 +10,11 @@ import sys
 CONFIG_NAME = "pomelodb.conf"
 MANAGED_BEGIN = "# BEGIN POMELODB MANAGED LOGGING"
 MANAGED_END = "# END POMELODB MANAGED LOGGING"
+IDENTITY_BEGIN = "# BEGIN POMELODB MANAGED IDENTITY"
+IDENTITY_END = "# END POMELODB MANAGED IDENTITY"
 ALLOWED_KEYS = {
     "cluster_mode", "coordinator_data_directory", "segment_data_directories",
-    "log_directory", "stop_mode", "wait",
+    "log_directory", "coordinator_port", "segment_ports", "stop_mode", "wait",
 }
 
 
@@ -69,6 +72,22 @@ def parse_config(root):
     if not values["segment_data_directories"]:
         raise ConfigError("segment_data_directories must not be empty")
     values["log_directory"] = resolve_path(values["log_directory"], root)
+    try:
+        values["coordinator_port"] = int(values.get("coordinator_port", "5432"))
+        segment_ports = [int(port.strip()) for port in values.get(
+            "segment_ports", "").split(",") if port.strip()]
+    except ValueError:
+        raise ConfigError("coordinator_port and segment_ports must be integers")
+    if not 1 <= values["coordinator_port"] <= 65535:
+        raise ConfigError("coordinator_port must be between 1 and 65535")
+    if not segment_ports:
+        segment_ports = list(range(6000, 6000 + len(
+            values["segment_data_directories"])))
+    if len(segment_ports) != len(values["segment_data_directories"]):
+        raise ConfigError("segment_ports must match segment_data_directories")
+    if any(port < 1 or port > 65535 for port in segment_ports):
+        raise ConfigError("segment_ports must be between 1 and 65535")
+    values["segment_ports"] = segment_ports
     for data_path in [values["coordinator_data_directory"]] + values[
             "segment_data_directories"]:
         common_path = os.path.commonpath([data_path, values["log_directory"]])
@@ -97,10 +116,54 @@ def run(command):
         return 1
 
 
+def sql_literal(value):
+    return "'%s'" % value.replace("'", "''")
+
+
+def seed_segment_configuration(root, values):
+    rows = [(1, -1, values["coordinator_port"],
+             values["coordinator_data_directory"])]
+    rows.extend((index + 2, index, values["segment_ports"][index], path)
+                for index, path in enumerate(values["segment_data_directories"]))
+    hostname = socket.gethostname()
+    # Single-user postgres treats each input line as one complete statement.
+    row_sql = ", ".join(
+        "(%d, %d, 'p', 'p', 'n', 'u', %d, %s, 'localhost', %s)" % (
+            dbid, content, port, sql_literal(hostname), sql_literal(datadir))
+        for dbid, content, port, datadir in rows)
+    statement = (
+        "TRUNCATE gp_segment_configuration;\n"
+        "INSERT INTO gp_segment_configuration "
+        "(dbid, content, role, preferred_role, mode, status, port, "
+        "hostname, address, datadir) VALUES %s;\n" % row_sql)
+    postgres = command_path(root, "postgres")
+    for data_directory in [values["coordinator_data_directory"]] + values[
+            "segment_data_directories"]:
+        try:
+            result = subprocess.run(
+                [postgres, "--single", "-D", data_directory,
+                 "-c", "allow_system_table_mods=on", "template1"],
+                input=statement, text=True, capture_output=True, check=False)
+        except OSError as error:
+            raise ConfigError("cannot seed %s: %s" % (data_directory, error))
+        if result.returncode != 0 or "ERROR" in result.stderr:
+            detail = (result.stderr or result.stdout).strip()
+            raise ConfigError("cannot seed %s: %s" % (data_directory, detail))
+
+
 def configure_cluster_logging(values):
     for data_directory in [values["coordinator_data_directory"]] + values[
             "segment_data_directories"]:
         configure_logging_for_directory(data_directory, values["log_directory"])
+
+
+def configure_cluster_identity(values):
+    configure_instance_identity(
+        values["coordinator_data_directory"], 1, -1, values["coordinator_port"])
+    for index, data_directory in enumerate(
+            values["segment_data_directories"]):
+        configure_instance_identity(data_directory, index + 2, index,
+                                    values["segment_ports"][index])
 
 
 def configure_logging_for_directory(data_directory, log_directory):
@@ -133,14 +196,54 @@ def configure_logging_for_directory(data_directory, log_directory):
         config_file.writelines(retained)
 
 
+def configure_instance_identity(data_directory, dbid, content_id, port):
+    config_path = os.path.join(data_directory, "postgresql.conf")
+    if not os.path.isfile(config_path):
+        raise ConfigError("%s does not exist; initialize the cluster first" % config_path)
+    with open(config_path, encoding="utf-8") as config_file:
+        lines = config_file.readlines()
+    retained = []
+    in_managed_block = False
+    for line in lines:
+        if line.rstrip("\n") == IDENTITY_BEGIN:
+            in_managed_block = True
+            continue
+        if line.rstrip("\n") == IDENTITY_END:
+            in_managed_block = False
+            continue
+        if not in_managed_block:
+            retained.append(line)
+    if retained and not retained[-1].endswith("\n"):
+        retained[-1] += "\n"
+    retained.extend([
+        "\n", IDENTITY_BEGIN + "\n", "port = %d\n" % port,
+        "gp_contentid = %d\n" % content_id, IDENTITY_END + "\n",
+    ])
+    with open(config_path, "w", encoding="utf-8") as config_file:
+        config_file.writelines(retained)
+
+    auto_conf_path = os.path.join(data_directory, "internal.auto.conf")
+    auto_lines = []
+    if os.path.isfile(auto_conf_path):
+        with open(auto_conf_path, encoding="utf-8") as auto_conf:
+            auto_lines = [line for line in auto_conf.readlines()
+                          if not line.startswith("gp_dbid=")]
+    auto_lines.append("gp_dbid=%d\n" % dbid)
+    with open(auto_conf_path, "w", encoding="utf-8") as auto_conf:
+        auto_conf.writelines(auto_lines)
+
+
 def init(root, values):
     configure_cluster_logging(values)
+    configure_cluster_identity(values)
+    seed_segment_configuration(root, values)
     return 0
 
 
 def start(root, values):
     os.makedirs(values["log_directory"], mode=0o750, exist_ok=True)
     configure_cluster_logging(values)
+    configure_cluster_identity(values)
     commands = []
     for data_directory in values["segment_data_directories"]:
         commands.append([command_path(root, "pg_ctl"), "start", "-D",
