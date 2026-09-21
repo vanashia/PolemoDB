@@ -6,6 +6,9 @@ include(FindPackageHandleStandardArgs)
 find_package(Threads REQUIRED)
 find_package(Perl REQUIRED)
 find_package(PkgConfig QUIET)
+if(NOT WIN32)
+  find_library(GPDB_M_LIBRARY NAMES m REQUIRED)
+endif()
 
 # Keep the generated dynamic shared-memory default consistent with the host.
 # initdb copies postgresql.conf.sample, which defaults to POSIX DSM when
