@@ -14,7 +14,6 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 90
     env:
-      CCACHE_DIR: ${{ runner.temp }}/pomelodb-ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
 
@@ -26,7 +25,6 @@ jobs:
           test "$(uname -s)" = Linux
           test "$(uname -m)" = x86_64
           test -r /etc/debian_version
-          command -v cmake ninja ccache pkg-config flex bison
           printf 'runner=%s\n' "$RUNNER_NAME"
           printf 'debian=%s\n' "$(cat /etc/debian_version)"
 
@@ -35,6 +33,25 @@ jobs:
         with:
           clean: true
           submodules: false
+
+      - name: Install native build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential ccache cmake ninja-build pkg-config flex bison \
+            libapr1-dev libcurl4-openssl-dev libevent-dev libyaml-dev \
+            libxerces-c-dev libxml2-dev libkrb5-dev libperl-dev python3-dev \
+            libreadline-dev zlib1g-dev libbz2-dev libzstd-dev libssl-dev
+
+      - name: Verify native build tools
+        shell: bash
+        run: command -v cmake ninja ccache pkg-config flex bison
+
+      - name: Configure runner-local ccache
+        shell: bash
+        run: echo "CCACHE_DIR=$RUNNER_TEMP/pomelodb-ccache" >> "$GITHUB_ENV"
 
       - name: Configure native CMake build
         shell: bash

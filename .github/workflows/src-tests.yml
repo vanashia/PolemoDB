@@ -12,9 +12,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
-env:
-  POMELODB_INSTALL_PREFIX: ${{ runner.temp }}/pomelodb
-
 jobs:
   src-build:
     runs-on: ubuntu-24.04
@@ -45,7 +42,7 @@ jobs:
           set -euo pipefail
           cmake -S . -B build-src-tests -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_INSTALL_PREFIX="$POMELODB_INSTALL_PREFIX" \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
@@ -63,7 +60,7 @@ jobs:
       - name: Build and install native test targets
         run: |
           cmake --build build-src-tests --target gpdb gpdb-regression-tools --parallel 2
-          cmake --install build-src-tests --prefix "$POMELODB_INSTALL_PREFIX"
+          cmake --install build-src-tests --prefix "$RUNNER_TEMP/pomelodb"
 
       - name: Package native install
         run: |
@@ -104,6 +101,9 @@ jobs:
 
       - name: Extract native install
         run: tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
+
+      - name: Export native install path
+        run: echo "POMELODB_INSTALL_PREFIX=$RUNNER_TEMP/pomelodb" >> "$GITHUB_ENV"
 
       - name: Initialize and start isolated MPP cluster
         shell: bash
