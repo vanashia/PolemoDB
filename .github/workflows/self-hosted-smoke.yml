@@ -38,8 +38,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          command -v cmake ninja ccache pkg-config flex bison
-          command -v curl-config
+          required_tools=(cmake ninja ccache pkg-config flex bison curl-config)
+          missing_tools=()
+          for tool in "${required_tools[@]}"; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              missing_tools+=("$tool")
+            fi
+          done
+
+          if ((${#missing_tools[@]})); then
+            printf 'missing native build tools: %s\n' "${missing_tools[*]}"
+            if [[ "$(id -u)" != 0 ]]; then
+              echo 'The self-hosted runner is not root; install the missing tools before rerunning.'
+              exit 1
+            fi
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              build-essential ccache cmake ninja-build pkg-config flex bison \
+              libcurl4-openssl-dev
+          fi
+
+          for tool in "${required_tools[@]}"; do
+            command -v "$tool" >/dev/null
+          done
 
       - name: Configure runner-local ccache
         shell: bash
