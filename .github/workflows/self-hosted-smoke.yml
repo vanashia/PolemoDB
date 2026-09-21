@@ -105,6 +105,7 @@ jobs:
             -DGPDB_WITH_PERL=OFF \
             -DGPDB_WITH_PYTHON=OFF \
             -DGPDB_WITH_LIBXML=OFF \
+            -DGPDB_WITH_READLINE=OFF \
             -DGPDB_WITH_GSSAPI=OFF \
             -DGPDB_WITH_OPENSSL=ON \
             -DGPDB_WITH_ZLIB=ON \
