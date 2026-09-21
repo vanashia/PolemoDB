@@ -14,4 +14,6 @@ add_library(gpos ${srcs})
 target_link_libraries(gpos ${CMAKE_DL_LIBS})
 
 # Tests reside in the 'server' subdirectory.
-add_subdirectory(server)
+if(GPDB_ENABLE_ORCA_TESTS)
+  add_subdirectory(server)
+endif()

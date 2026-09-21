@@ -27,6 +27,7 @@ option(GPDB_ENABLE_DEBUG_EXTENSIONS "Build fault-injection extensions" ON)
 option(GPDB_ENABLE_DEBUG "Build debug configuration" OFF)
 option(GPDB_ENABLE_CASSERT "Enable assertion checks" OFF)
 option(GPDB_ENABLE_ORCA "Build ORCA optimizer" ON)
+option(GPDB_ENABLE_ORCA_TESTS "Build ORCA unit tests" OFF)
 option(GPDB_ENABLE_IC_PROXY "Build interconnect proxy" OFF)
 option(GPDB_ENABLE_THREAD_SAFETY "Build thread-safe client libraries" ON)
 option(GPDB_ENABLE_INTEGER_DATETIMES "Use integer datetimes" ON)
@@ -69,6 +70,11 @@ set(GPDB_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}" CACHE PATH "PomeloDB i
 
 function(gpdb_apply_common_options _target)
   target_compile_features(${_target} PRIVATE c_std_99)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(${_target} PRIVATE
+      -fno-strict-aliasing
+      -fwrapv)
+  endif()
   target_compile_definitions(${_target} PRIVATE
     _GNU_SOURCE
     FLOAT4PASSBYVAL=true
@@ -118,5 +124,15 @@ function(gpdb_apply_common_options _target)
   if(GPDB_CXXFLAGS)
     separate_arguments(_extra_cxxflags UNIX_COMMAND "${GPDB_CXXFLAGS}")
     target_compile_options(${_target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${_extra_cxxflags}>)
+  endif()
+endfunction()
+
+function(gpdb_apply_module_link_options _target)
+  if(APPLE)
+    # Match src/Makefile.port: backend modules must resolve their symbols
+    # against the postgres executable that loads them.
+    add_dependencies(${_target} postgres)
+    target_link_options(${_target} PRIVATE
+      "-bundle_loader" "$<TARGET_FILE:postgres>")
   endif()
 endfunction()

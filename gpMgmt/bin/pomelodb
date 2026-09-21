@@ -2,7 +2,6 @@
 """Manage a local PomeloDB instance from the installed pomelodb.conf."""
 
 import os
-import socket
 import subprocess
 import sys
 
@@ -125,7 +124,10 @@ def seed_segment_configuration(root, values):
              values["coordinator_data_directory"])]
     rows.extend((index + 2, index, values["segment_ports"][index], path)
                 for index, path in enumerate(values["segment_data_directories"]))
-    hostname = socket.gethostname()
+    # A single-host cluster listens on loopback.  Keep the catalog connection
+    # target aligned with that bind address instead of relying on the machine
+    # hostname resolving back to localhost.
+    hostname = "localhost"
     # Single-user postgres treats each input line as one complete statement.
     row_sql = ", ".join(
         "(%d, %d, 'p', 'p', 'n', 'u', %d, %s, 'localhost', %s)" % (

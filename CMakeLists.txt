@@ -7,12 +7,24 @@ include(CTest)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(GPDBOptions)
+
+if(GPDB_ENABLE_RPATH)
+  if(APPLE)
+    set(CMAKE_BUILD_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+    set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+  elseif(UNIX)
+    set(CMAKE_BUILD_RPATH "\$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+    set(CMAKE_INSTALL_RPATH "\$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+  endif()
+endif()
+
 include(GPDBDependencies)
 include(GPDBGenerate)
 include(GPDBNativeLibraries)
 include(GPDBBackend)
 include(GPDBClients)
 include(GPDBGpfdist)
+include(GPDBTests)
 
 add_custom_target(gpdb ALL DEPENDS gpdb-server gpdb-clients)
 if(TARGET gpfdist)
@@ -21,12 +33,19 @@ endif()
 add_dependencies(gpdb dict_snowball)
 add_dependencies(gpdb plpgsql)
 add_dependencies(gpdb gp_exttable_fdw)
+add_dependencies(gpdb gp_toolkit)
+add_dependencies(gpdb gp_ao_co_diagnostics gp_workfile_mgr
+  gp_session_state_memory_stats gp_instrument_shmem)
+add_dependencies(gpdb pageinspect gp_inject_fault gp_debug_numsegments)
+if(TARGET gp_zstd_compression)
+  add_dependencies(gpdb gp_zstd_compression)
+endif()
 
 install(TARGETS postgres pg_ctl psql pg_config initdb
   pg_archivecleanup pg_checksums pg_controldata pg_resetwal pg_test_fsync
   pg_test_timing pg_basebackup pg_receivewal pg_recvlogical pg_dump pg_restore
   pg_dumpall pg_rewind pg_waldump clusterdb createdb createuser dropdb dropuser
-  pg_isready reindexdb vacuumdb libpq_shared
+  pg_isready reindexdb vacuumdb pgbench libpq_shared
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
@@ -36,10 +55,29 @@ endif()
 install(TARGETS dict_snowball LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS plpgsql LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS gp_exttable_fdw LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+install(TARGETS gp_toolkit LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+install(TARGETS gp_ao_co_diagnostics gp_workfile_mgr gp_session_state_memory_stats
+  gp_instrument_shmem LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+install(TARGETS pageinspect gp_inject_fault gp_debug_numsegments
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+if(TARGET gp_zstd_compression)
+  install(TARGETS gp_zstd_compression
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+endif()
 
 install(TARGETS pgport pgport_shlib pgport_srv pgcommon pgcommon_shlib
   pgcommon_srv pgfeutils libpq
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(TARGETS pg_regress extended_protocol_resqueue twophase_pqexecparams
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(TARGETS regress autoinc refint test_hook query_info_hook_test
+  LIBRARY DESTINATION "${GPDB_INSTALL_DATADIR}/regress")
+if(TARGET gpos)
+  install(TARGETS gpos gpopt naucrates gpdbcost
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+endif()
 
 # PostgreSQL derives its loadable-module directory from the location of the
 # postgres executable and verifies it during every startup, including initdb's
@@ -74,6 +112,10 @@ install(FILES
   DESTINATION "${GPDB_INSTALL_DATADIR}")
 install(FILES gpcontrib/gp_toolkit/sql/gp_toolkit.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
+if(GPDB_WITH_ZSTD)
+  install(FILES gpcontrib/zstd/zstd_compression.sql
+    DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
+endif()
 
 install(DIRECTORY src/timezone/tznames/
   DESTINATION "${GPDB_INSTALL_DATADIR}/timezonesets"
@@ -97,6 +139,41 @@ install(FILES
   gpcontrib/gp_exttable_fdw/gp_exttable_fdw.control
   gpcontrib/gp_exttable_fdw/gp_exttable_fdw--1.0.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+install(FILES
+  gpcontrib/gp_toolkit/gp_toolkit.control
+  gpcontrib/gp_toolkit/gp_toolkit--1.0.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.0--1.1.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.1--1.2.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.2--1.3.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.3.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.3--1.4.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.4--1.5.sql
+  gpcontrib/gp_toolkit/gp_toolkit--1.5--1.6.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+install(FILES
+  gpcontrib/gp_internal_tools/gp_internal_tools.control
+  gpcontrib/gp_internal_tools/gp_internal_tools--1.0.0.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+install(FILES
+  contrib/pageinspect/pageinspect.control
+  contrib/pageinspect/pageinspect--1.0--1.1.sql
+  contrib/pageinspect/pageinspect--1.1--1.2.sql
+  contrib/pageinspect/pageinspect--1.2--1.3.sql
+  contrib/pageinspect/pageinspect--1.3--1.4.sql
+  contrib/pageinspect/pageinspect--1.4--1.5.sql
+  contrib/pageinspect/pageinspect--1.5.sql
+  contrib/pageinspect/pageinspect--1.5--1.6.sql
+  contrib/pageinspect/pageinspect--1.6--1.7.sql
+  contrib/pageinspect/pageinspect--1.7--1.8.sql
+  contrib/pageinspect/pageinspect--1.8--1.9.sql
+  contrib/pageinspect/pageinspect--unpackaged--1.0.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+install(FILES
+  gpcontrib/gp_inject_fault/gp_inject_fault.control
+  gpcontrib/gp_inject_fault/gp_inject_fault--1.0.sql
+  gpcontrib/gp_debug_numsegments/gp_debug_numsegments.control
+  gpcontrib/gp_debug_numsegments/gp_debug_numsegments--1.0.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
 
 install(FILES
   src/backend/utils/misc/postgresql.conf.sample
@@ -105,7 +182,36 @@ install(FILES
   DESTINATION "${GPDB_INSTALL_DATADIR}")
 install(DIRECTORY src/test/regress/
   DESTINATION "${GPDB_INSTALL_DATADIR}/regress"
-  FILES_MATCHING PATTERN "*.sql" PATTERN "*.out" PATTERN "*.sh" PATTERN "*.pl")
+  FILES_MATCHING
+  PATTERN "*.sql"
+  PATTERN "*.out"
+  PATTERN "*.sh"
+  PATTERN "*.pl"
+  PATTERN "*.pm"
+  PATTERN "*.source"
+  PATTERN "*_schedule"
+  PATTERN "resultmap"
+  PATTERN "init_file")
+install(DIRECTORY "${GPDB_REGRESS_BUILD_DIR}/"
+  DESTINATION "${GPDB_INSTALL_DATADIR}/regress"
+  FILES_MATCHING
+  PATTERN "*.pl"
+  PATTERN "*.pm"
+  PATTERN "*.sh"
+  PATTERN "pg_regress"
+  PATTERN "*.so")
+install(PROGRAMS
+  "${GPDB_REGRESS_BUILD_DIR}/gpdiff.pl"
+  "${GPDB_REGRESS_BUILD_DIR}/gpstringsubs.pl"
+  "${GPDB_REGRESS_BUILD_DIR}/atmsort.pl"
+  "${GPDB_REGRESS_BUILD_DIR}/explain.pl"
+  "${GPDB_REGRESS_BUILD_DIR}/scan_flaky_fault_injectors.sh"
+  DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(FILES
+  "${GPDB_REGRESS_BUILD_DIR}/atmsort.pm"
+  "${GPDB_REGRESS_BUILD_DIR}/explain.pm"
+  "${GPDB_REGRESS_BUILD_DIR}/GPTest.pm"
+  DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(DIRECTORY gpMgmt/bin/
   DESTINATION "${CMAKE_INSTALL_BINDIR}"
   FILES_MATCHING PATTERN "*"

@@ -2,25 +2,10 @@ name: PomeloDB Source Tests
 
 on:
   push:
-    branches:
-      - "**"
-    paths-ignore:
-      - '**/*.md'
-      - 'README*'
-      - 'docs/**'
-      - '**/*.png'
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.svg'
+    branches: ["**"]
+    paths-ignore: ["**/*.md", "README*", "docs/**", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.svg"]
   pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - 'README*'
-      - 'docs/**'
-      - '**/*.png'
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.svg'
+    paths-ignore: ["**/*.md", "README*", "docs/**", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.svg"]
   workflow_dispatch:
 
 concurrency:
@@ -28,95 +13,72 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GPDB_LEGACY_BUILD_DIR: /var/tmp/pomelodb-legacy
-  POMELODB_INSTALL_PREFIX: /tmp/pomelodb
+  POMELODB_INSTALL_PREFIX: ${{ runner.temp }}/pomelodb
 
 jobs:
   src-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      CMAKE_BUILD_PARALLEL_LEVEL: 1
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
       - name: Restore ccache
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: src-tests-ccache-${{ runner.os }}-${{ hashFiles('configure', 'CMakeLists.txt') }}-${{ github.sha }}
+          key: src-tests-ccache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake', '**/CMakeLists.txt') }}-${{ github.sha }}
           restore-keys: |
             src-tests-ccache-${{ runner.os }}-
 
       - name: Install build dependencies
         run: bash .github/scripts/source-test-dependencies.sh build
 
-      - name: Reset and verify ccache
+      - name: Configure native Debug build
         run: |
-          ccache --zero-stats
-          ccache --show-config
-
-      - name: Configure legacy test build through CMake
-        run: |
+          set -euo pipefail
           cmake -S . -B build-src-tests -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_INSTALL_PREFIX="$POMELODB_INSTALL_PREFIX" \
-            -DGPDB_LEGACY_BUILD_DIR="$GPDB_LEGACY_BUILD_DIR" \
-            -DGPDB_CONFIGURE_ENV="CC=ccache gcc;CXX=ccache g++;CFLAGS=-O0;CXXFLAGS=-O0;LLVM_CONFIG=llvm-config-14;CLANG=clang-14" \
-            -DGPDB_ENABLE_NATIVE_TARGETS=OFF \
-            -DGPDB_ENABLE_TAP_TESTS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
-            -DGPDB_WITH_LLVM=ON \
+            -DGPDB_ENABLE_ORCA=ON \
             -DGPDB_WITH_PERL=ON \
             -DGPDB_WITH_PYTHON=ON \
             -DGPDB_WITH_OPENSSL=ON \
             -DGPDB_WITH_GSSAPI=ON \
-            -DGPDB_WITH_LDAP=ON \
             -DGPDB_WITH_LIBXML=ON \
             -DGPDB_WITH_ZLIB=ON \
             -DGPDB_WITH_LIBBZ2=ON \
             -DGPDB_WITH_ZSTD=ON \
-            -DGPDB_WITH_LIBCURL=ON \
             -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
-      - name: Build and install database
+      - name: Build and install native test targets
         run: |
-          cmake --build build-src-tests --target gpdb --parallel 1
-          cmake --build build-src-tests --target gpdb-install --parallel 1
+          cmake --build build-src-tests --target gpdb gpdb-regression-tools --parallel 2
+          cmake --install build-src-tests --prefix "$POMELODB_INSTALL_PREFIX"
 
-      - name: Build source test helpers
+      - name: Package native install
         run: |
-          bash .github/scripts/prepare-source-tests.sh
-          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/regress" all
-          for test_dir in fsync walrep heap_checksum examples locale isolation isolation2 fdw; do
-            make -C "$GPDB_LEGACY_BUILD_DIR/src/test/$test_dir" all
-          done
-          test -r "$POMELODB_INSTALL_PREFIX/bin/lib/gp_bash_version.sh"
-          test -r "$GPDB_LEGACY_BUILD_DIR/src/test/regress/regress.so"
+          mkdir -p "$RUNNER_TEMP/pomelodb-source-build"
+          tar -C "$RUNNER_TEMP" -czf \
+            "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz" \
+            pomelodb
 
-      - name: Package build artifact
-        run: |
-          mkdir -p "$RUNNER_TEMP/source-build-artifact"
-          tar -C / -czf \
-            "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz" \
-            tmp/pomelodb var/tmp/pomelodb-legacy
-          test -s \
-            "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
-
-      - name: Upload build artifact
+      - name: Upload native build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pomelodb-source-build-${{ github.sha }}
+          name: pomelodb-native-source-build-${{ github.sha }}
           if-no-files-found: error
           retention-days: 1
-          path: ${{ runner.temp }}/source-build-artifact/pomelodb-source-build.tar.gz
+          path: ${{ runner.temp }}/pomelodb-source-build/pomelodb-native.tar.gz
 
       - name: Show ccache statistics
         if: always()
@@ -125,692 +87,115 @@ jobs:
   src-regression:
     needs: src-build
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
-      - name: Install test dependencies
+      - name: Install runtime dependencies
         run: bash .github/scripts/source-test-dependencies.sh runtime
 
-      - name: Download build artifact
+      - name: Download native build artifact
         uses: actions/download-artifact@v4
         with:
-          name: pomelodb-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/source-build-artifact
+          name: pomelodb-native-source-build-${{ github.sha }}
+          path: ${{ runner.temp }}/pomelodb-source-build
 
-      - name: Extract build artifact
-        run: tar -C / -xzf "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
+      - name: Extract native install
+        run: tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
 
-      - name: Prepare regression tree
+      - name: Initialize and start isolated MPP cluster
+        shell: bash
         run: |
-          bash .github/scripts/prepare-source-tests.sh
-          ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/regress/regress.so" \
-            "$GITHUB_WORKSPACE/src/test/regress/regress.so"
-          declare -A helper_sources=(
-            [hooktest/test_hook.so]=src/test/regress/hooktest/test_hook.so
-            [query_info_hook_test/query_info_hook_test.so]=src/test/regress/query_info_hook_test/query_info_hook_test.so
-            [fsync_helper.so]=src/test/fsync/fsync_helper.so
-            [gplibpq.so]=src/test/walrep/gplibpq.so
-            [heap_checksum_helper.so]=src/test/heap_checksum/heap_checksum_helper.so
-          )
-          for helper in "${!helper_sources[@]}"; do
-            source_path="$GPDB_LEGACY_BUILD_DIR/${helper_sources[$helper]}"
-            test -r "$source_path"
-            mkdir -p "$GITHUB_WORKSPACE/src/test/regress/$(dirname "$helper")"
-            ln -sfn "$source_path" "$GITHUB_WORKSPACE/src/test/regress/$helper"
+          set -Eeuo pipefail
+          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
+          export LD_LIBRARY_PATH="$POMELODB_INSTALL_PREFIX/lib:$POMELODB_INSTALL_PREFIX/lib/postgresql:${LD_LIBRARY_PATH:-}"
+          cluster_root="$RUNNER_TEMP/pomelodb-native-mpp"
+          coordinator="$cluster_root/coordinator"
+          segment0="$cluster_root/segment0"
+          segment1="$cluster_root/segment1"
+          segment2="$cluster_root/segment2"
+          mkdir -p "$cluster_root/log"
+          for data_dir in "$coordinator" "$segment0" "$segment1" "$segment2"; do
+            initdb -D "$data_dir" --no-locale --encoding=UTF8
           done
-          ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/regress/data" \
-            "$GITHUB_WORKSPACE/src/test/isolation2/data"
+          cat > "$POMELODB_INSTALL_PREFIX/pomelodb.conf" <<EOF
+          cluster_mode=mpp
+          coordinator_data_directory=$coordinator
+          segment_data_directories=$segment0,$segment1,$segment2
+          log_directory=$cluster_root/log
+          coordinator_port=15432
+          segment_ports=16000,16001,16002
+          stop_mode=fast
+          wait=true
+          EOF
+          pomelodb init
+          pomelodb start
+          {
+            echo "POMELODB_CLUSTER_ROOT=$cluster_root"
+            echo "PGHOST=127.0.0.1"
+            echo "PGPORT=15432"
+            echo "PGDATABASE=postgres"
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+          } >> "$GITHUB_ENV"
+          psql -X -v ON_ERROR_STOP=1 -Atqc \
+            "select current_setting('gp_role'), count(*) from gp_segment_configuration where status='u'"
 
-      - name: Initialize production MPP test cluster
-        run: bash .github/scripts/init-source-test-cluster.sh
-
-      - name: Run src/test/regress installcheck suites against production MPP
+      - name: Run src/test/regress schedule
         id: regression
         continue-on-error: true
+        shell: bash
         run: |
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
-          export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
-          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          export EXTRA_REGRESS_OPTS="--max-concurrent-tests=20"
-          mkdir -p "$GPDB_LEGACY_BUILD_DIR/src/test/regress/results"
-          mkdir -p "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml" \
-            "$GITHUB_WORKSPACE/src/test/regress/expected/uao_ddl"
-          for uao_dir in uao_dml uao_ddl; do
-            for source_file in "$GITHUB_WORKSPACE/src/test/regress/output/$uao_dir"/*.source; do
-              source_name="$(basename "$source_file" .source)"
-              for orientation in row column; do
-                am_name=ao_row
-                ao_segment=aoseg
-                if [[ "$orientation" == column ]]; then
-                  am_name=ao_column
-                  ao_segment=aocsseg
-                fi
-                output_name="${source_name}_${orientation}.out"
-                if [[ "$source_name" == *_optimizer ]]; then
-                  output_name="${source_name%_optimizer}_${orientation}_optimizer.out"
-                fi
-                sed \
-                  -e "s|@amname@|$am_name|g" \
-                  -e "s|@aoseg@|$ao_segment|g" \
-                  -e "s|@abs_srcdir@|$GITHUB_WORKSPACE/src/test/regress|g" \
-                  "$source_file" \
-                  > "$GITHUB_WORKSPACE/src/test/regress/expected/$uao_dir/$output_name"
-              done
-            done
-          done
-          test -r "$GITHUB_WORKSPACE/src/test/regress/expected/uao_dml/gp_fastsequence_row.out"
-          echo "Running upstream and Greenplum regression schedules"
-          regression_log="$RUNNER_TEMP/regression-command.log"
-          set +e
-          make -C "$GPDB_LEGACY_BUILD_DIR/src/test/regress" installcheck \
-            REGRESS_OPTS="--dlpath=. --max-concurrent-tests=20 --init-file=$GITHUB_WORKSPACE/src/test/regress/init_file --outputdir=$GITHUB_WORKSPACE/src/test/regress" \
-            2>&1 | tee "$regression_log"
-          regression_status=${PIPESTATUS[0]}
-          set -e
-          exit "$regression_status"
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/pomelodb-regress-results"
+          export PGOPTIONS='-c optimizer=off'
+          "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
+            --inputdir="$GITHUB_WORKSPACE/src/test/regress" \
+            --outputdir="$RUNNER_TEMP/pomelodb-regress-results" \
+            --bindir="$POMELODB_INSTALL_PREFIX/bin" \
+            --dlpath="$POMELODB_INSTALL_PREFIX/share/postgresql/regress" \
+            --tablespace-dir="$RUNNER_TEMP/pomelodb-regress-results/tablespace" \
+            --max-concurrent-tests=20 \
+            --init-file="$GITHUB_WORKSPACE/src/test/regress/init_file" \
+            --load-extension=gp_inject_fault \
+            --schedule="$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" \
+            --schedule="$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule" \
+            2>&1 | tee "$RUNNER_TEMP/pomelodb-regression.log"
+          printf '%s\n' "${PIPESTATUS[0]}" > "$RUNNER_TEMP/pomelodb-regression.status"
 
-      - name: Collect regression artifacts
-        if: always()
-        run: |
-          mkdir -p ci-artifacts
-          while IFS= read -r -d '' source_path; do
-            relative_path="${source_path#"$GPDB_LEGACY_BUILD_DIR/"}"
-            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
-            cp -a "$source_path" "ci-artifacts/$relative_path"
-          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test" \
-            -type d \( -name tmp_check -o -name results -o -name output_iso \) \
-            -print0)
-          if [[ -d "$GITHUB_WORKSPACE/src/test/regress/results" ]]; then
-            mkdir -p ci-artifacts/source-regress
-            cp -a "$GITHUB_WORKSPACE/src/test/regress/results" \
-              ci-artifacts/source-regress/results
-          fi
-          for report in regression.out regression.diffs; do
-            if [[ -f "$GITHUB_WORKSPACE/src/test/regress/$report" ]]; then
-              cp -a "$GITHUB_WORKSPACE/src/test/regress/$report" \
-                ci-artifacts/source-regress/$report
-            fi
-          done
-          if [[ -f "$RUNNER_TEMP/regression-command.log" ]]; then
-            cp -a "$RUNNER_TEMP/regression-command.log" ci-artifacts/source-regress/
-          fi
-
-      - name: Upload regression artifacts
+      - name: Upload regression results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: src-regression-${{ github.run_id }}
+          name: pomelodb-src-regression-${{ github.run_id }}
           if-no-files-found: warn
-          path: ci-artifacts/**
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/pomelodb-regression.log
+            ${{ runner.temp }}/pomelodb-regression.status
+            ${{ runner.temp }}/pomelodb-regress-results
+            ${{ runner.temp }}/pomelodb-native-mpp/log
 
       - name: Summarize regression failures
         if: always()
+        shell: bash
         run: |
-          diff_file="$GITHUB_WORKSPACE/src/test/regress/regression.diffs"
-          {
-            echo "## Source regression summary"
-            if [[ "${{ steps.regression.outcome }}" == success ]]; then
-              echo "All scheduled regression tests passed."
-            elif [[ -s "$diff_file" ]]; then
-              echo "The regression command completed with failures:"
-              grep -E '^diff .*expected/[^ ]+\.out ' "$diff_file" \
-                | sed -E 's#.*expected/([^/]+)\.out.*#- `\1`#' \
-                | sort -u || true
-              echo
-              echo "Full differences are in the uploaded regression artifact."
-            elif [[ -s "$RUNNER_TEMP/regression-command.log" ]]; then
-              failed_tests=$(grep -E '[[:space:]][^[:space:]]+[[:space:]]+\.\.\.[[:space:]]+FAILED' \
-                "$RUNNER_TEMP/regression-command.log" \
-                | sed -E 's/.*[[:space:]]([^[:space:]]+)[[:space:]]+\.\.\.[[:space:]]+FAILED.*/- `\1`/' \
-                | sort -u || true)
-              if [[ -n "$failed_tests" ]]; then
-                echo "Observed failed tests before the regression command stopped:"
-                echo "$failed_tests"
-              else
-                echo "No FAILED test line was observed before the regression command stopped."
-              fi
-              echo
-              echo "Full command output is in the uploaded regression artifact."
-            else
-              echo "The regression command failed before producing regression.diffs."
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.regression.outcome }}" != success ]]; then
-            exit 1
+          status=0
+          if [[ -f "$RUNNER_TEMP/pomelodb-regression.status" ]]; then
+            status="$(cat "$RUNNER_TEMP/pomelodb-regression.status")"
           fi
+          echo '### src/test/regress summary' >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f "$RUNNER_TEMP/pomelodb-regression.log" ]]; then
+            grep -E '^[[:space:]]+[[:alnum:]_./-]+[[:space:]]+\.\.\.[[:space:]]+FAILED' \
+              "$RUNNER_TEMP/pomelodb-regression.log" >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+          exit "$status"
 
-  src-isolation2:
-    needs: src-build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install test dependencies
-        run: bash .github/scripts/source-test-dependencies.sh runtime
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pomelodb-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/source-build-artifact
-
-      - name: Extract build artifact
-        run: tar -C / -xzf "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
-
-      - name: Prepare test tree
-        run: |
-          bash .github/scripts/prepare-source-tests.sh
-          ln -sfn "$GPDB_LEGACY_BUILD_DIR/src/test/regress/regress.so" \
-            "$GITHUB_WORKSPACE/src/test/regress/regress.so"
-
-      - name: Initialize production MPP test cluster
-        run: bash .github/scripts/init-source-test-cluster.sh
-
-      - name: Run isolation2 suites
-        id: isolation2
-        continue-on-error: true
-        run: |
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
-          export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
-          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          isolation2_dir="$GPDB_LEGACY_BUILD_DIR/src/test/isolation2"
-          isolation2_log="$RUNNER_TEMP/isolation2-command.log"
-          set +e
-          make -k -C "$isolation2_dir" installcheck \
-            EXTRA_REGRESS_OPTS="--max-concurrent-tests=20" \
-            2>&1 | tee "$isolation2_log"
-          isolation2_status=${PIPESTATUS[0]}
-          set -e
-          exit "$isolation2_status"
-
-      - name: Collect isolation2 artifacts
+      - name: Stop isolated MPP cluster
         if: always()
+        shell: bash
         run: |
-          mkdir -p ci-artifacts
-          while IFS= read -r -d '' source_path; do
-            relative_path="${source_path#"$GPDB_LEGACY_BUILD_DIR/"}"
-            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
-            cp -a "$source_path" "ci-artifacts/$relative_path"
-          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2" \
-            -type d \( -name tmp_check -o -name results -o -name output_iso \) \
-            -print0)
-          if [[ -f "$RUNNER_TEMP/isolation2-command.log" ]]; then
-            cp -a "$RUNNER_TEMP/isolation2-command.log" ci-artifacts/
-          fi
-          for report in regression.out regression.diffs; do
-            if [[ -f "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/$report" ]]; then
-              cp -a "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/$report" \
-                ci-artifacts/
-            fi
-          done
-
-      - name: Upload isolation2 artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: src-isolation2-${{ github.run_id }}
-          if-no-files-found: warn
-          path: ci-artifacts/**
-
-      - name: Summarize isolation2 failures
-        if: always()
-        run: |
-          {
-            echo "## isolation2 test summary"
-            if [[ "${{ steps.isolation2.outcome }}" == success ]]; then
-              echo "All isolation2 tests passed."
-            else
-              echo "Failed isolation2 tests observed before the command stopped:"
-              if [[ -s "$RUNNER_TEMP/isolation2-command.log" ]] && \
-                 grep -Eq 'FAILED|ERROR' "$RUNNER_TEMP/isolation2-command.log"; then
-                grep -E 'FAILED|ERROR' "$RUNNER_TEMP/isolation2-command.log" | tail -n 100
-              else
-                echo "- The command returned non-zero; inspect the uploaded artifact."
-              fi
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.isolation2.outcome }}" != success ]]; then
-            exit 1
-          fi
-
-  src-isolation:
-    needs: src-build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install test dependencies
-        run: bash .github/scripts/source-test-dependencies.sh runtime
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pomelodb-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/source-build-artifact
-
-      - name: Extract build artifact
-        run: tar -C / -xzf "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
-
-      - name: Prepare test tree
-        run: bash .github/scripts/prepare-source-tests.sh
-
-      - name: Initialize production MPP test cluster
-        run: bash .github/scripts/init-source-test-cluster.sh
-
-      - name: Run isolation suites
-        id: isolation
-        continue-on-error: true
-        run: |
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
-          export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
-          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          isolation_dir="$GPDB_LEGACY_BUILD_DIR/src/test/isolation"
-          isolation_log="$RUNNER_TEMP/isolation-command.log"
-          set +e
-          make -C "$isolation_dir" installcheck 2>&1 | tee "$isolation_log"
-          isolation_status=${PIPESTATUS[0]}
-          set -e
-          exit "$isolation_status"
-
-      - name: Collect isolation artifacts
-        if: always()
-        run: |
-          mkdir -p ci-artifacts
-          while IFS= read -r -d '' source_path; do
-            relative_path="${source_path#"$GPDB_LEGACY_BUILD_DIR/"}"
-            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
-            cp -a "$source_path" "ci-artifacts/$relative_path"
-          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test/isolation" \
-            -type d \( -name tmp_check -o -name results -o -name output_iso \) \
-            -print0)
-          if [[ -f "$RUNNER_TEMP/isolation-command.log" ]]; then
-            cp -a "$RUNNER_TEMP/isolation-command.log" ci-artifacts/
-          fi
-
-      - name: Upload isolation artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: src-isolation-${{ github.run_id }}
-          if-no-files-found: warn
-          path: ci-artifacts/**
-
-      - name: Summarize isolation failures
-        if: always()
-        run: |
-          {
-            echo "## isolation test summary"
-            if [[ "${{ steps.isolation.outcome }}" == success ]]; then
-              echo "All isolation tests passed."
-            else
-              echo "Failed isolation tests observed before the command stopped:"
-              if [[ -s "$RUNNER_TEMP/isolation-command.log" ]] && \
-                 grep -Eq 'FAILED|ERROR' "$RUNNER_TEMP/isolation-command.log"; then
-                grep -E 'FAILED|ERROR' "$RUNNER_TEMP/isolation-command.log" | tail -n 100
-              else
-                echo "- The command returned non-zero; inspect the uploaded artifact."
-              fi
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.isolation.outcome }}" != success ]]; then
-            exit 1
-          fi
-
-  src-additional:
-    needs: src-build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        suite:
-          - fsync
-          - walrep
-          - heap_checksum
-          - authentication
-          - recovery
-          - fdw
-          - kerberos
-          - ldap
-          - ssl
-          # src/test/Makefile intentionally excludes modules from the default
-          # installcheck recursion. Keep these tests as non-blocking diagnostics
-          # because several PostgreSQL-only expectations are not GPDB-portable.
-          - modules
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install test dependencies
-        run: bash .github/scripts/source-test-dependencies.sh runtime
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pomelodb-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/source-build-artifact
-
-      - name: Extract build artifact
-        run: tar -C / -xzf "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
-
-      - name: Prepare test tree
-        run: bash .github/scripts/prepare-source-tests.sh
-
-      - name: Initialize production MPP test cluster
-        run: bash .github/scripts/init-source-test-cluster.sh
-
-      - name: Run ${{ matrix.suite }} suite
-        id: additional
-        continue-on-error: true
-        run: |
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
-          export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
-          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          suite_dir="$GPDB_LEGACY_BUILD_DIR/src/test/${{ matrix.suite }}"
-          suite_log="$RUNNER_TEMP/${{ matrix.suite }}-command.log"
-          set +e
-          if [[ "${{ matrix.suite }}" == modules ]]; then
-            install_log="$RUNNER_TEMP/modules-install.log"
-            make -k -C "$suite_dir" install 2>&1 | tee "$install_log"
-            install_status=${PIPESTATUS[0]}
-            if [[ "$install_status" -ne 0 ]]; then
-              echo "modules installation failed with status $install_status" >&2
-              exit "$install_status"
-            fi
-          fi
-          make -k -C "$suite_dir" installcheck 2>&1 | tee "$suite_log"
-          suite_status=${PIPESTATUS[0]}
-          set -e
-          exit "$suite_status"
-
-      - name: Collect ${{ matrix.suite }} artifacts
-        if: always()
-        run: |
-          mkdir -p ci-artifacts
-          while IFS= read -r -d '' source_path; do
-            relative_path="${source_path#"$GPDB_LEGACY_BUILD_DIR/"}"
-            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
-            cp -a "$source_path" "ci-artifacts/$relative_path"
-          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test/${{ matrix.suite }}" \
-            -type d \( -name tmp_check -o -name results -o -name output_iso \) \
-            -print0)
-          if [[ -f "$RUNNER_TEMP/${{ matrix.suite }}-command.log" ]]; then
-            cp -a "$RUNNER_TEMP/${{ matrix.suite }}-command.log" ci-artifacts/
-          fi
-          if [[ -f "$RUNNER_TEMP/${{ matrix.suite }}-install.log" ]]; then
-            cp -a "$RUNNER_TEMP/${{ matrix.suite }}-install.log" ci-artifacts/
-          fi
-          suite_root="$GPDB_LEGACY_BUILD_DIR/src/test/${{ matrix.suite }}"
-          while IFS= read -r -d '' report; do
-            relative_path="${report#"$suite_root/"}"
-            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
-            cp -a "$report" "ci-artifacts/$relative_path"
-          done < <(find "$suite_root" \
-            -type f \( -name regression.out -o -name regression.diffs \) -print0)
-
-      - name: Upload ${{ matrix.suite }} artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: src-${{ matrix.suite }}-${{ github.run_id }}
-          if-no-files-found: warn
-          path: ci-artifacts/**
-
-      - name: Summarize ${{ matrix.suite }} failures
-        if: always()
-        run: |
-          {
-            echo "## ${{ matrix.suite }} test summary"
-            if [[ "${{ steps.additional.outcome }}" == success ]]; then
-              echo "The ${{ matrix.suite }} suite passed."
-            else
-              echo "Failed ${{ matrix.suite }} tests observed before the command stopped:"
-              if [[ -s "$RUNNER_TEMP/${{ matrix.suite }}-command.log" ]] && \
-                 grep -Eq 'FAILED|ERROR' "$RUNNER_TEMP/${{ matrix.suite }}-command.log"; then
-                grep -E 'FAILED|ERROR' "$RUNNER_TEMP/${{ matrix.suite }}-command.log" | tail -n 100
-              else
-                echo "- The command returned non-zero; inspect the uploaded artifact."
-              fi
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ matrix.suite }}" == modules ]]; then
-            echo "The modules suite is diagnostic-only; its failures are preserved in the artifact." \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [[ "${{ steps.additional.outcome }}" != success ]]; then
-            exit 1
-          fi
-
-  src-locale:
-    needs: src-build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install test dependencies
-        run: bash .github/scripts/source-test-dependencies.sh runtime
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pomelodb-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/source-build-artifact
-
-      - name: Extract build artifact
-        run: tar -C / -xzf "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
-
-      - name: Prepare test tree
-        run: bash .github/scripts/prepare-source-tests.sh
-
-      - name: Initialize production MPP test cluster
-        run: bash .github/scripts/init-source-test-cluster.sh
-
-      - name: Run locale suites
-        id: locale
-        continue-on-error: true
-        run: |
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
-          locale_dir="$GPDB_LEGACY_BUILD_DIR/src/test/locale"
-          locale_failures="$RUNNER_TEMP/locale-failures"
-          : > "$locale_failures"
-          for suite in \
-            check-de_DE.ISO8859-1 \
-            check-gr_GR.ISO8859-7 \
-            check-koi8-r \
-            check-koi8-to-win1251; do
-            echo "===== Running locale suite: $suite ====="
-            if make -C "$locale_dir" "$suite"; then
-              echo "PASS $suite"
-            else
-              echo "FAIL $suite"
-              echo "$suite" >> "$locale_failures"
-            fi
-          done
-          if [[ -s "$locale_failures" ]]; then
-            exit 1
-          fi
-
-      - name: Collect locale artifacts
-        if: always()
-        run: |
-          mkdir -p ci-artifacts
-          if [[ -f "$RUNNER_TEMP/locale-failures" ]]; then
-            cp -a "$RUNNER_TEMP/locale-failures" ci-artifacts/
-          fi
-          while IFS= read -r -d '' source_path; do
-            relative_path="${source_path#"$GPDB_LEGACY_BUILD_DIR/"}"
-            mkdir -p "ci-artifacts/$(dirname "$relative_path")"
-            cp -a "$source_path" "ci-artifacts/$relative_path"
-          done < <(find "$GPDB_LEGACY_BUILD_DIR/src/test/locale" \
-            -type d \( -name output_iso -o -name results \) -print0)
-
-      - name: Upload locale artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: src-locale-${{ github.run_id }}
-          if-no-files-found: warn
-          path: ci-artifacts/**
-
-      - name: Summarize locale failures
-        if: always()
-        run: |
-          {
-            echo "## Locale test summary"
-            if [[ "${{ steps.locale.outcome }}" == success ]]; then
-              echo "All locale suites passed."
-            elif [[ -s "$RUNNER_TEMP/locale-failures" ]]; then
-              echo "Failed locale suites:"
-              sed 's/^/- `/' "$RUNNER_TEMP/locale-failures" | sed 's/$/`/'
-            else
-              echo "The locale test command failed before producing a suite list."
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.locale.outcome }}" != success ]]; then
-            exit 1
-          fi
-
-  src-vacuum-progress:
-    needs: src-build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        test:
-          - vacuum_progress_row
-          - vacuum_progress_column
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install test dependencies
-        run: bash .github/scripts/source-test-dependencies.sh runtime
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pomelodb-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/source-build-artifact
-
-      - name: Extract build artifact
-        run: tar -C / -xzf "$RUNNER_TEMP/source-build-artifact/pomelodb-source-build.tar.gz"
-
-      - name: Prepare test tree
-        run: bash .github/scripts/prepare-source-tests.sh
-
-      - name: Initialize production MPP test cluster
-        run: bash .github/scripts/init-source-test-cluster.sh
-
-      - name: Run ${{ matrix.test }}
-        id: vacuum_progress
-        continue-on-error: true
-        run: |
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-          export COORDINATOR_DATA_DIRECTORY="$RUNNER_TEMP/pomelodb-coordinator/gpseg-1"
-          export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
-          export PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=postgres
-          isolation_dir="$GPDB_LEGACY_BUILD_DIR/src/test/isolation2"
-          schedule_file="$RUNNER_TEMP/${{ matrix.test }}.schedule"
-          output_dir="$RUNNER_TEMP/${{ matrix.test }}-output"
-          vacuum_log="$RUNNER_TEMP/${{ matrix.test }}.log"
-          mkdir -p "$output_dir"
-          printf 'test: %s\n' '${{ matrix.test }}' > "$schedule_file"
-          set +e
-          (
-            cd "$isolation_dir"
-            set +e
-            timeout --foreground 15m \
-              ./pg_isolation2_regress \
-              --inputdir="$GITHUB_WORKSPACE/src/test/isolation2" \
-              --outputdir="$output_dir" \
-              --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-              --init-file="$GPDB_LEGACY_BUILD_DIR/src/test/regress/init_file" \
-              --init-file="$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/init_file_isolation2" \
-              --schedule="$schedule_file" \
-              --load-extension=gp_inject_fault \
-              --max-concurrent-tests=1 \
-              2>&1 | tee "$vacuum_log"
-            isolation_status=${PIPESTATUS[0]}
-            exit "$isolation_status"
-          )
-          vacuum_status=$?
-          set -e
-          exit "$vacuum_status"
-
-      - name: Collect vacuum progress artifacts
-        if: always()
-        run: |
-          mkdir -p ci-artifacts
-          if [[ -d "$RUNNER_TEMP/${{ matrix.test }}-output" ]]; then
-            cp -a "$RUNNER_TEMP/${{ matrix.test }}-output" ci-artifacts/
-          fi
-          if [[ -f "$RUNNER_TEMP/${{ matrix.test }}.log" ]]; then
-            cp -a "$RUNNER_TEMP/${{ matrix.test }}.log" ci-artifacts/
-          fi
-          if [[ -f "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/tests_using_faultinjectors.txt" ]]; then
-            cp -a "$GPDB_LEGACY_BUILD_DIR/src/test/isolation2/tests_using_faultinjectors.txt" \
-              ci-artifacts/
-          fi
-
-      - name: Upload vacuum progress artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: src-${{ matrix.test }}-${{ github.run_id }}
-          if-no-files-found: warn
-          path: ci-artifacts/**
-
-      - name: Summarize vacuum progress failure
-        if: always()
-        run: |
-          {
-            echo "## ${{ matrix.test }} summary"
-            if [[ "${{ steps.vacuum_progress.outcome }}" == success ]]; then
-              echo "${{ matrix.test }} passed."
-            else
-              echo "${{ matrix.test }} failed or timed out after 15 minutes."
-              echo "Full output is in the uploaded artifact."
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.vacuum_progress.outcome }}" != success ]]; then
-            exit 1
+          if [[ -x "$POMELODB_INSTALL_PREFIX/bin/pomelodb" ]]; then
+            "$POMELODB_INSTALL_PREFIX/bin/pomelodb" stop || true
           fi

@@ -6659,7 +6659,7 @@ getTables(Archive *fout, int *numTables)
 							"pg_catalog.pg_get_table_distributedby(c.oid) as distclause, ");
 	else
 			appendPQExpBufferStr(query,
-							"(SELECT attrnums FROM pg_catalog.gp_distribution_policy p "
+							"(SELECT distkey FROM pg_catalog.gp_distribution_policy p "
 					  	"WHERE p.localoid = c.oid) as distclause, ");
 
 	if (fout->remoteVersion >= 100000)

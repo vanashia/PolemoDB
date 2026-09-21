@@ -83,7 +83,9 @@ include_directories(${XERCES_INCLUDE_DIRS})
 # GPOS.
 include_directories(libgpos/include)
 
-enable_testing()
+if(GPDB_ENABLE_ORCA_TESTS)
+  enable_testing()
+endif()
 
 # Sub-libraries.
 add_subdirectory(libgpos)
@@ -92,4 +94,6 @@ add_subdirectory(libgpdbcost)
 add_subdirectory(libgpopt)
 
 # Tests.
-add_subdirectory(server)
+if(GPDB_ENABLE_ORCA_TESTS)
+  add_subdirectory(server)
+endif()

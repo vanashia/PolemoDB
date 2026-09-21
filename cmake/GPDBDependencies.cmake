@@ -6,6 +6,12 @@ find_package(Threads REQUIRED)
 find_package(Perl REQUIRED)
 find_package(PkgConfig QUIET)
 
+# Keep the generated dynamic shared-memory default consistent with the host.
+# initdb copies postgresql.conf.sample, which defaults to POSIX DSM when
+# shm_open() is available.  Without this native probe macOS would generate a
+# server that rejects its own freshly initialized configuration.
+check_symbol_exists(shm_open "sys/mman.h" GPDB_HAVE_SHM_OPEN)
+
 if(GPDB_WITH_ZLIB)
   find_package(ZLIB REQUIRED)
 endif()

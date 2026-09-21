@@ -45,11 +45,8 @@ add_dependencies(dict_snowball gpdb-generated)
 target_include_directories(dict_snowball PRIVATE ${_gpdb_include_dirs}
   "${CMAKE_SOURCE_DIR}/src/include/snowball"
   "${CMAKE_SOURCE_DIR}/src/include/snowball/libstemmer")
-target_link_libraries(dict_snowball PRIVATE pgcommon pgport gpdb-platform)
 set_target_properties(dict_snowball PROPERTIES PREFIX "" SUFFIX ".so")
-if(APPLE)
-  target_link_options(dict_snowball PRIVATE "-Wl,-undefined,dynamic_lookup")
-endif()
+gpdb_apply_module_link_options(dict_snowball)
 
 set(_gpdb_plpgsql_sources
   src/pl/plpgsql/src/pl_handler.c
@@ -64,11 +61,8 @@ add_dependencies(plpgsql gpdb-generated)
 target_include_directories(plpgsql PRIVATE ${_gpdb_include_dirs}
   "${CMAKE_SOURCE_DIR}/src/pl/plpgsql/src"
   "${GPDB_GENERATED_BACKEND_DIR}/plpgsql")
-target_link_libraries(plpgsql PRIVATE pgcommon pgport gpdb-platform)
 set_target_properties(plpgsql PROPERTIES PREFIX "" SUFFIX ".so")
-if(APPLE)
-  target_link_options(plpgsql PRIVATE "-Wl,-undefined,dynamic_lookup")
-endif()
+gpdb_apply_module_link_options(plpgsql)
 
 add_library(gp_exttable_fdw MODULE
   gpcontrib/gp_exttable_fdw/gp_exttable_fdw.c
@@ -80,9 +74,79 @@ target_include_directories(gp_exttable_fdw PRIVATE ${_gpdb_include_dirs}
   "${CMAKE_SOURCE_DIR}/gpcontrib/gp_exttable_fdw")
 target_link_libraries(gp_exttable_fdw PRIVATE libpq gpdb-platform)
 set_target_properties(gp_exttable_fdw PROPERTIES PREFIX "" SUFFIX ".so")
-if(APPLE)
-  target_link_options(gp_exttable_fdw PRIVATE "-Wl,-undefined,dynamic_lookup")
+gpdb_apply_module_link_options(gp_exttable_fdw)
+
+if(GPDB_WITH_ZSTD)
+  add_library(gp_zstd_compression MODULE gpcontrib/zstd/zstd_compression.c)
+  gpdb_apply_common_options(gp_zstd_compression)
+  add_dependencies(gp_zstd_compression gpdb-generated)
+  target_include_directories(gp_zstd_compression PRIVATE
+    ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend"
+    "${GPDB_ZSTD_INCLUDE_DIR}")
+  target_link_libraries(gp_zstd_compression PRIVATE gpdb-platform)
+  set_target_properties(gp_zstd_compression PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(gp_zstd_compression)
 endif()
+
+set(_gpdb_toolkit_sources gpcontrib/gp_toolkit/gp_partition_maint.c)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  list(APPEND _gpdb_toolkit_sources gpcontrib/gp_toolkit/resgroup.c)
+else()
+  list(APPEND _gpdb_toolkit_sources gpcontrib/gp_toolkit/resgroup-dummy.c)
+endif()
+add_library(gp_toolkit MODULE ${_gpdb_toolkit_sources})
+gpdb_apply_common_options(gp_toolkit)
+add_dependencies(gp_toolkit gpdb-generated)
+target_include_directories(gp_toolkit PRIVATE ${_gpdb_include_dirs}
+  "${CMAKE_SOURCE_DIR}/src/backend"
+  "${CMAKE_SOURCE_DIR}/gpcontrib/gp_toolkit")
+target_link_libraries(gp_toolkit PRIVATE gpdb-platform)
+set_target_properties(gp_toolkit PROPERTIES PREFIX "" SUFFIX ".so")
+gpdb_apply_module_link_options(gp_toolkit)
+
+foreach(_gpdb_internal_tool IN ITEMS
+    gp_ao_co_diagnostics gp_workfile_mgr gp_session_state_memory_stats
+    gp_instrument_shmem)
+  add_library(${_gpdb_internal_tool} MODULE
+    "${CMAKE_SOURCE_DIR}/gpcontrib/gp_internal_tools/${_gpdb_internal_tool}.c")
+  gpdb_apply_common_options(${_gpdb_internal_tool})
+  add_dependencies(${_gpdb_internal_tool} gpdb-generated)
+  target_include_directories(${_gpdb_internal_tool} PRIVATE
+    ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend"
+    "${CMAKE_SOURCE_DIR}/gpcontrib/gp_internal_tools")
+  target_link_libraries(${_gpdb_internal_tool} PRIVATE gpdb-platform)
+  set_target_properties(${_gpdb_internal_tool} PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(${_gpdb_internal_tool})
+endforeach()
+
+add_library(pageinspect MODULE
+  contrib/pageinspect/rawpage.c
+  contrib/pageinspect/heapfuncs.c
+  contrib/pageinspect/bmfuncs.c
+  contrib/pageinspect/btreefuncs.c
+  contrib/pageinspect/fsmfuncs.c
+  contrib/pageinspect/brinfuncs.c
+  contrib/pageinspect/ginfuncs.c
+  contrib/pageinspect/hashfuncs.c)
+gpdb_apply_common_options(pageinspect)
+add_dependencies(pageinspect gpdb-generated)
+target_include_directories(pageinspect PRIVATE ${_gpdb_include_dirs}
+  "${CMAKE_SOURCE_DIR}/src/backend" "${CMAKE_SOURCE_DIR}/contrib/pageinspect")
+target_link_libraries(pageinspect PRIVATE gpdb-platform)
+set_target_properties(pageinspect PROPERTIES PREFIX "" SUFFIX ".so")
+gpdb_apply_module_link_options(pageinspect)
+
+foreach(_gpdb_debug_extension IN ITEMS gp_inject_fault gp_debug_numsegments)
+  add_library(${_gpdb_debug_extension} MODULE
+    "${CMAKE_SOURCE_DIR}/gpcontrib/${_gpdb_debug_extension}/${_gpdb_debug_extension}.c")
+  gpdb_apply_common_options(${_gpdb_debug_extension})
+  add_dependencies(${_gpdb_debug_extension} gpdb-generated)
+  target_include_directories(${_gpdb_debug_extension} PRIVATE
+    ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend")
+  target_link_libraries(${_gpdb_debug_extension} PRIVATE gpdb-platform)
+  set_target_properties(${_gpdb_debug_extension} PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(${_gpdb_debug_extension})
+endforeach()
 
 set(_basebackup_sources
   src/bin/pg_basebackup/receivelog.c src/bin/pg_basebackup/streamutil.c
@@ -179,12 +243,41 @@ foreach(_name IN ITEMS clusterdb createdb createuser dropdb dropuser pg_isready 
 endforeach()
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/bin/pgbench/pgbench.c")
-  gpdb_add_frontend_executable(pgbench src/bin/pgbench/pgbench.c)
-  target_link_libraries(pgbench PRIVATE libpq)
+  set(_pgbench_generated_dir "${CMAKE_BINARY_DIR}/generated/src/bin/pgbench")
+  set(_pgbench_exprparse "${_pgbench_generated_dir}/exprparse.c")
+  set(_pgbench_exprparse_h "${_pgbench_generated_dir}/exprparse.h")
+  set(_pgbench_exprscan "${_pgbench_generated_dir}/exprscan.c")
+  add_custom_command(
+    OUTPUT "${_pgbench_exprparse}" "${_pgbench_exprparse_h}" "${_pgbench_exprscan}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${_pgbench_generated_dir}"
+    COMMAND "${GPDB_BISON_EXECUTABLE}" -d
+            -o "${_pgbench_exprparse}"
+            "${CMAKE_SOURCE_DIR}/src/bin/pgbench/exprparse.y"
+    COMMAND "${GPDB_FLEX_EXECUTABLE}" -o "${_pgbench_exprscan}"
+            "${CMAKE_SOURCE_DIR}/src/bin/pgbench/exprscan.l"
+    DEPENDS "${CMAKE_SOURCE_DIR}/src/bin/pgbench/exprparse.y"
+            "${CMAKE_SOURCE_DIR}/src/bin/pgbench/exprscan.l"
+    VERBATIM)
+  gpdb_add_frontend_executable(pgbench
+    src/bin/pgbench/pgbench.c "${_pgbench_exprparse}")
+  target_include_directories(pgbench PRIVATE
+    "${CMAKE_SOURCE_DIR}/src/bin/pgbench"
+    "${_pgbench_generated_dir}")
+  set_source_files_properties(src/bin/pgbench/pgbench.c
+    PROPERTIES OBJECT_DEPENDS "${_pgbench_exprparse_h}")
+  target_link_libraries(pgbench PRIVATE libpq pgfeutils)
+endif()
+
+set(_gpdb_compression_targets)
+if(TARGET gp_zstd_compression)
+  list(APPEND _gpdb_compression_targets gp_zstd_compression)
 endif()
 
 add_custom_target(gpdb-clients DEPENDS
-  pg_config initdb zic gpdb-timezone-data dict_snowball plpgsql gp_exttable_fdw pg_archivecleanup pg_checksums pg_controldata pg_ctl
+  pg_config initdb zic gpdb-timezone-data dict_snowball plpgsql gp_exttable_fdw gp_toolkit
+  gp_ao_co_diagnostics gp_workfile_mgr gp_session_state_memory_stats gp_instrument_shmem
+  pageinspect gp_inject_fault gp_debug_numsegments ${_gpdb_compression_targets}
+  libpq_shared pg_archivecleanup pg_checksums pg_controldata pg_ctl
   pg_resetwal pg_test_fsync pg_test_timing pg_basebackup pg_receivewal
   pg_recvlogical pg_dump pg_restore pg_dumpall pg_rewind pg_waldump psql
-  clusterdb createdb createuser dropdb dropuser pg_isready reindexdb vacuumdb)
+  clusterdb createdb createuser dropdb dropuser pg_isready reindexdb vacuumdb pgbench)

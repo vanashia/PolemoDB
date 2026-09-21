@@ -1,5 +1,15 @@
 find_program(GPDB_PERL_EXECUTABLE perl REQUIRED)
-find_program(GPDB_BISON_EXECUTABLE bison REQUIRED)
+if(APPLE)
+  # macOS ships an old Bison 2.3 which cannot parse the Greenplum grammar.
+  # Prefer the versioned Homebrew locations before falling back to PATH.
+  find_program(GPDB_BISON_EXECUTABLE bison
+    HINTS /opt/homebrew/opt/bison/bin /usr/local/opt/bison/bin)
+else()
+  find_program(GPDB_BISON_EXECUTABLE bison)
+endif()
+if(NOT GPDB_BISON_EXECUTABLE)
+  message(FATAL_ERROR "Bison is required to generate the parser sources")
+endif()
 find_program(GPDB_FLEX_EXECUTABLE flex REQUIRED)
 
 set(GPDB_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -46,7 +56,15 @@ add_custom_command(
     -DUSE_OPENSSL=${GPDB_WITH_OPENSSL}
     -DUSE_OPENSSL_RANDOM=${GPDB_WITH_OPENSSL}
     -DUSE_DEV_URANDOM=$<NOT:$<BOOL:${GPDB_WITH_OPENSSL}>>
+    -DHAVE_LIBSSL=${GPDB_WITH_OPENSSL}
+    -DHAVE_LIBBZ2=${GPDB_WITH_LIBBZ2}
+    -DHAVE_LIBZ=${GPDB_WITH_ZLIB}
+    -DHAVE_SHM_OPEN=${GPDB_HAVE_SHM_OPEN}
+    -DHAVE_LIBREADLINE=$<BOOL:${GPDB_WITH_READLINE}>
+    -DHAVE_READLINE_READLINE_H=$<BOOL:${GPDB_WITH_READLINE}>
+    -DHAVE_READLINE_HISTORY_H=$<BOOL:${GPDB_WITH_READLINE}>
     -DENABLE_GSS=${GPDB_WITH_GSSAPI}
+    -DHAVE_GSSAPI_GSSAPI_H=${GPDB_WITH_GSSAPI}
     -DENABLE_THREAD_SAFETY=${GPDB_ENABLE_THREAD_SAFETY}
     -DUSE_LIBXML=${GPDB_WITH_LIBXML}
     -DUSE_ZSTD=${GPDB_WITH_ZSTD}
@@ -54,6 +72,7 @@ add_custom_command(
     -DUSE_ARMV8_CRC32C=${_gpdb_use_armv8_crc32c}
     -DUSE_SYSV_SEMAPHORES=${_gpdb_use_sysv_semaphores}
     -DUSE_SYSV_SHARED_MEMORY=${_gpdb_use_sysv_semaphores}
+    -DFAULT_INJECTOR=${GPDB_ENABLE_DEBUG_EXTENSIONS}
     -P ${CMAKE_SOURCE_DIR}/cmake/scripts/generate_pg_config.cmake
   DEPENDS "${CMAKE_SOURCE_DIR}/src/include/pg_config.h.in"
           "${CMAKE_SOURCE_DIR}/cmake/scripts/generate_pg_config.cmake"

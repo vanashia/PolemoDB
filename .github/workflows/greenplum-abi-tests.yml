@@ -1,24 +1,12 @@
-name: Greenplum ABI Tests
+name: PomeloDB ABI Tests
 
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - 'concourse/scripts/**'
-      - 'src/**'
-      - '.github/workflows/**'
-      - '.github/scripts/**'
-      - '.abi-check/**'
-
+    paths: ["src/**", "cmake/**", "CMakeLists.txt", ".github/workflows/**"]
   push:
-    branches:
-      - main
-    paths:
-      - 'concourse/scripts/**'
-      - 'src/**'
-      - '.github/workflows/**'
-      - '.github/scripts/**'
-      - '.abi-check/**'
+    branches: [main]
+    paths: ["src/**", "cmake/**", "CMakeLists.txt", ".github/workflows/**"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -26,195 +14,129 @@ concurrency:
 
 jobs:
   abi-dump-setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
-      BASELINE_REF: ${{ steps.vars.outputs.BASELINE_REF }}
-      BASELINE_VERSION: ${{ steps.vars.outputs.BASELINE_VERSION }}
-      ABI_LIBS: ${{ steps.vars.outputs.ABI_LIBS }}
-      ABI_HEADERS: ${{ steps.vars.outputs.ABI_HEADERS }}
-      EXCEPTION_LISTS_COUNT: ${{ steps.check_exception_lists.outputs.EXCEPTION_LISTS_COUNT }}
+      baseline_ref: ${{ steps.vars.outputs.baseline_ref }}
     steps:
-      - name: Fetch source
-        uses: actions/checkout@v4
-
-      - name: Get Greenplum version variables
+      - name: Resolve comparison base
         id: vars
+        shell: bash
         run: |
-          remote_repo='https://github.com/GreenPlumn/gpdb.git'
-          git ls-remote --tags --refs --sort='v:refname' $remote_repo '7.*' | tail -n 1  > baseline_version_ref
-          baseline_ref=$(cat baseline_version_ref | awk '{print $1}')
-          baseline_version=$(cat baseline_version_ref | awk '{print $2}')
-          echo "BASELINE_REF=${baseline_ref}" | tee -a $GITHUB_OUTPUT
-          echo "BASELINE_VERSION=${baseline_version#'refs/tags/'}" | tee -a $GITHUB_OUTPUT
-          echo "ABI_LIBS=postgres" | tee -a $GITHUB_OUTPUT
-          echo "ABI_HEADERS=." | tee -a $GITHUB_OUTPUT
-
-      - name: Check if exception list exists
-        id: check_exception_lists
-        run: |
-          exception_lists_count=$(ls .abi-check/${{ steps.vars.outputs.BASELINE_VERSION }}/ 2> /dev/null | wc -l)
-          echo "EXCEPTION_LISTS_COUNT=${exception_lists_count}" | tee -a $GITHUB_OUTPUT
-
-      - name: Upload symbol/type checking exception list
-        if: steps.check_exception_lists.outputs.EXCEPTION_LISTS_COUNT != '0'
-        uses: actions/upload-artifact@v4
-        with:
-          name: exception_lists
-          path: '.abi-check/${{ steps.vars.outputs.BASELINE_VERSION }}/'
+          set -euo pipefail
+          baseline='${{ github.event.pull_request.base.sha }}'
+          if [[ -z "$baseline" ]]; then
+            baseline='${{ github.event.before }}'
+          fi
+          if [[ -z "$baseline" || "$baseline" =~ ^0+$ ]]; then
+            baseline='${{ github.sha }}^'
+          fi
+          echo "baseline_ref=$baseline" >> "$GITHUB_OUTPUT"
 
   abi-dump:
     needs: abi-dump-setup
-    runs-on: ubuntu-latest
-    container: rockylinux:8
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
-        name:
-          - build-baseline
-          - build-latest
         include:
           - name: build-baseline
-            repo: GreenPlumn/gpdb
-            ref: ${{ needs.abi-dump-setup.outputs.BASELINE_VERSION }}
+            ref: ${{ needs.abi-dump-setup.outputs.baseline_ref }}
           - name: build-latest
-            repo: ${{ github.repository }}
             ref: ${{ github.sha }}
 
     steps:
-      - name: Install Rocky Linux build dependencies
-        run: |
-          dnf install -y epel-release
-          dnf groupinstall -y "Development Tools"
-          dnf install -y --nobest \
-            apr-devel bison bzip2-devel cmake flex gcc gcc-c++ git \
-            krb5-devel libcurl-devel libevent-devel libxml2-devel \
-            libzstd-devel openldap-devel openssl-devel pam-devel perl-ExtUtils-Embed \
-            perl-App-cpanminus perl-Test-Simple \
-            python39 python39-devel python3-pip python3-psutil \
-            python3-pyyaml readline-devel rsync wget xerces-c-devel \
-            libuuid-devel zlib-devel
-          dnf install -y --enablerepo=powertools libuv-devel libyaml-devel
-          cpanm --notest IPC::Run
-          alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 39
-          ln -sf /usr/bin/python3.9 /usr/local/bin/python3
-          ln -sf /usr/bin/python3.9 /usr/local/bin/python
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.ref }}
+          path: source
+          submodules: false
 
-      ## FIXME: abi-dumper requires 'Universal Ctags' but the package manager only provides
-      ## 'Exuberant Ctags'.
-      - name: Install universal-ctags.
+      - name: Install ABI and native build dependencies
         run: |
-          wget 'https://github.com/universal-ctags/ctags-nightly-build/releases/download/2023.07.05%2Bafdae39c0c2e508d113cbc570f4635b96159840c/uctags-2023.07.05-linux-x86_64.tar.xz'
-          tar -xf uctags-2023.07.05-linux-x86_64.tar.xz
-          cp uctags-2023.07.05-linux-x86_64/bin/* /usr/bin/
-          command -v ctags
+          sudo apt-get update
+          sudo apt-get install -y \
+            abi-dumper abi-compliance-checker build-essential cmake ninja-build \
+            ccache flex bison pkg-config libapr1-dev libevent-dev libyaml-dev \
+            libxerces-c-dev libxml2-dev libkrb5-dev libperl-dev python3-dev \
+            libreadline-dev zlib1g-dev libbz2-dev libzstd-dev libssl-dev
 
-      - name: Download Greenplum source code
+      - name: Build native ABI binary
+        working-directory: source
         run: |
-          if [ "${{ matrix.name }}" = "build-baseline" ]; then
-            git config --global url."https://github.com/pgbouncer/pgbouncer.git".insteadOf \
-              "https://github.com/greenplum-db/pgbouncer.git"
-            git config --global url."https://github.com/GreenPlumn/postgis.git".insteadOf \
-              "https://github.com/greenplum-db/postgis.git"
-            git clone --recursive \
-              "https://github.com/${{ matrix.repo }}.git" \
-              gpdb_src
-          else
-            git clone --recursive \
-              "https://x-access-token:${{ github.token }}@github.com/${{ matrix.repo }}.git" \
-              gpdb_src
-          fi
-          git -C gpdb_src checkout "${{ matrix.ref }}"
-          git -C gpdb_src submodule update --init --recursive
-
-      - name: Install abi-dumper
-        run: |
-          dnf install -y abi-dumper
-
-      - name: Build Greenplum
-        run: |
-          ## TODO: Since abi-dumper requires debug info and it's hard to inject CFLAGS via the script for
-          ## releasing Greenplum, we have to manually configure it here. Probably we can improve it in future.
-          pushd gpdb_src
-          CC='gcc -m64' \
-          CFLAGS='-Og -g3 -Wno-maybe-uninitialized' LDFLAGS='-Wl,--enable-new-dtags -Wl,--export-dynamic' \
-          ./configure --disable-gpperfmon --disable-orca --with-gssapi --enable-mapreduce --enable-orafce --enable-ic-proxy \
-                      --with-libxml --with-pythonsrc-ext --with-uuid=e2fs --with-pgport=5432 --enable-tap-tests \
-                      --enable-debug-extensions --with-perl --with-python --with-openssl --with-pam --with-ldap --with-includes="" \
-                      --with-libraries="" --disable-rpath \
-                      --prefix=/usr/local/greenplum-db-devel \
-                      --mandir=/usr/local/greenplum-db-devel/man
-          make -C src/backend
-          install -D src/backend/postgres /usr/local/greenplum-db-devel/bin/postgres
-          install -d /usr/local/greenplum-db-devel/include
-          cp -a src/include/. /usr/local/greenplum-db-devel/include/
+          cmake -S . -B build-abi -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS='-Og -g3' \
+            -DCMAKE_CXX_FLAGS='-Og -g3' \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
+            -DGPDB_ENABLE_ORCA=OFF \
+            -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
+            -DGPDB_WITH_PERL=ON \
+            -DGPDB_WITH_PYTHON=ON \
+            -DGPDB_WITH_OPENSSL=ON \
+            -DGPDB_WITH_GSSAPI=ON \
+            -DGPDB_WITH_LIBXML=ON \
+            -DGPDB_WITH_ZLIB=ON \
+            -DGPDB_WITH_LIBBZ2=ON \
+            -DGPDB_WITH_ZSTD=ON \
+            -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
+          cmake --build build-abi --target postgres --parallel 2
+          mkdir -p "$RUNNER_TEMP/pomelodb-abi/include"
+          cp build-abi/postgres "$RUNNER_TEMP/pomelodb-abi/postgres"
+          cp -a src/include/. "$RUNNER_TEMP/pomelodb-abi/include/"
 
       - name: Dump ABI
         run: |
-          abi-dumper -lver ${{ matrix.ref }} -skip-cxx -public-headers /usr/local/greenplum-db-devel/include/${{ needs.abi-dump-setup.outputs.ABI_HEADERS }} -o postgres-${{ matrix.ref }}.abi /usr/local/greenplum-db-devel/bin/postgres
+          abi-dumper \
+            -lver "${{ matrix.ref }}" \
+            -skip-cxx \
+            -public-headers "$RUNNER_TEMP/pomelodb-abi/include" \
+            -o "postgres-${{ matrix.name }}.abi" \
+            "$RUNNER_TEMP/pomelodb-abi/postgres"
 
-      - name: Upload ABI files
+      - name: Upload ABI
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: '*${{ matrix.ref }}.abi'
+          if-no-files-found: error
+          retention-days: 7
+          path: postgres-${{ matrix.name }}.abi
 
   abi-compare:
-    needs:
-      - abi-dump-setup
-      - abi-dump
-    runs-on: ubuntu-latest
-    container: rockylinux:8
+    needs: abi-dump
+    runs-on: ubuntu-24.04
     steps:
-      - name: Install ABI comparison dependencies
+      - name: Install ABI comparison tools
         run: |
-          dnf install -y epel-release
-          dnf install -y abi-compliance-checker
-          dnf install -y --enablerepo=powertools lynx
+          sudo apt-get update
+          sudo apt-get install -y abi-compliance-checker
 
-      - name: Download baseline
+      - name: Download baseline ABI
         uses: actions/download-artifact@v4
         with:
           name: build-baseline
-          path: build-baseline/
-      - name: Download latest
+          path: abi
+
+      - name: Download latest ABI
         uses: actions/download-artifact@v4
         with:
           name: build-latest
-          path: build-latest/
+          path: abi
 
-      - name: Download exception lists
-        if: needs.abi-dump-setup.outputs.EXCEPTION_LISTS_COUNT != '0'
-        uses: actions/download-artifact@v4
-        with:
-          name: exception_lists
-          path: exception_lists/
-
-      - name: Compare ABI (advisory)
+      - name: Compare ABI
         continue-on-error: true
         run: |
-          SKIP_POSTGRES_SYMBOLS_LIST="exception_lists/postgres.symbols.ignore"
-          SKIP_POSTGRES_SYMBOLS_OPTION=""
-          if [[ -f "$SKIP_POSTGRES_SYMBOLS_LIST" ]]; then
-            SKIP_POSTGRES_SYMBOLS_OPTION="-skip-symbols ${SKIP_POSTGRES_SYMBOLS_LIST}"
-          fi
-          SKIP_POSTGRES_TYPES_LIST="exception_lists/postgres.types.ignore"
-          SKIP_POSTGRES_TYPES_OPTION=""
-          if [[ -f "$SKIP_POSTGRES_TYPES_LIST" ]]; then
-            SKIP_POSTGRES_TYPES_OPTION="-skip-types ${SKIP_POSTGRES_TYPES_LIST}"
-          fi
-          abi-compliance-checker ${SKIP_POSTGRES_SYMBOLS_OPTION} \
-                                 ${SKIP_POSTGRES_TYPES_OPTION} \
-                                 -lib postgres \
-                                 -old build-baseline/postgres*.abi \
-                                 -new build-latest/postgres*.abi
+          abi-compliance-checker \
+            -l PomeloDB \
+            -old abi/postgres-build-baseline.abi \
+            -new abi/postgres-build-latest.abi \
+            -report-path abi/compatibility-report.html
 
-      - name: Print out ABI report
-        if: always()
-        run: |
-          lynx -dump $(find compat_reports/ | grep html)
-
-      - name: Upload ABI Comparison
+      - name: Upload ABI report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: compat-report-${{ github.sha }}
-          path: compat_reports/
+          name: pomelodb-abi-report-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: abi

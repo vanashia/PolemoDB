@@ -30,7 +30,7 @@ use Exporter;
 our @ISA = 'Exporter';
 our @EXPORT = qw($VERSION print_version);
 
-our $VERSION = '##Version: ##';
+our $VERSION = '@GPDB_TEST_VERSION@';
 
 sub print_version
 {

@@ -29,11 +29,11 @@ select gp_debug_get_create_table_default_numsegments();
 (1 row)
 
 create table t_reset_random (c1 int, c2 int) distributed by (c1);
-select localoid::regclass, attrnums, policytype
+select localoid::regclass, distkey, policytype
   from gp_distribution_policy
  where localoid='t_reset_random'::regclass
    and numsegments between 1 and 3;
-    localoid    | attrnums | policytype 
+    localoid    | distkey | policytype 
 ----------------+----------+------------
  t_reset_random | {1}      | p
 (1 row)
@@ -128,12 +128,12 @@ select gp_debug_get_create_table_default_numsegments();
 (1 row)
 
 create table t_reset_3 (c1 int, c2 int) distributed by (c1);
-select c.relname, d.attrnums, d.policytype, d.numsegments
+select c.relname, d.distkey, d.policytype, d.numsegments
   from gp_distribution_policy d
   join pg_class c
     on d.localoid=c.oid
    and c.relname like 't_reset_%';
-     relname     | attrnums | policytype | numsegments 
+     relname     | distkey | policytype | numsegments 
 -----------------+----------+------------+-------------
  t_reset_first   | {1}      | p          |           3
  t_reset_full    | {1}      | p          |           3

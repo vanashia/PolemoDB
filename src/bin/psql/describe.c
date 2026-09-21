@@ -3990,7 +3990,7 @@ add_distributed_by_footer(printTableContent *const cont, const char *oid)
 	else
 	{
 		printfPQExpBuffer(&tempbuf,
-						  "SELECT attrnums \n"
+						  "SELECT distkey \n"
 						  "FROM pg_catalog.gp_distribution_policy t\n"
 						  "WHERE localoid = '%s'",
 						  oid);
