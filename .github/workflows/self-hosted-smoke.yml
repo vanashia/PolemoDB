@@ -71,8 +71,12 @@ jobs:
               done
               export PATH="$tool_root/root/usr/bin:$PATH"
               export LD_LIBRARY_PATH="$tool_root/root/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+              export BISON_PKGDATADIR="$tool_root/root/usr/share/bison"
+              export FLEX_SKELETON_FILE="$tool_root/root/usr/share/flex/skel.c"
               echo "$tool_root/root/usr/bin" >> "$GITHUB_PATH"
               echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+              echo "BISON_PKGDATADIR=$BISON_PKGDATADIR" >> "$GITHUB_ENV"
+              echo "FLEX_SKELETON_FILE=$FLEX_SKELETON_FILE" >> "$GITHUB_ENV"
             fi
           fi
 
