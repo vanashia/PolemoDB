@@ -56,11 +56,11 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
-            -DGPDB_ENABLE_ORCA=ON \
-            -DGPDB_WITH_PERL=ON \
-            -DGPDB_WITH_PYTHON=ON \
-            -DGPDB_WITH_LIBXML=ON \
-            -DGPDB_WITH_GSSAPI=ON \
+            -DGPDB_ENABLE_ORCA=OFF \
+            -DGPDB_WITH_PERL=OFF \
+            -DGPDB_WITH_PYTHON=OFF \
+            -DGPDB_WITH_LIBXML=OFF \
+            -DGPDB_WITH_GSSAPI=OFF \
             -DGPDB_WITH_OPENSSL=ON \
             -DGPDB_WITH_ZLIB=ON \
             -DGPDB_WITH_LIBBZ2=OFF \

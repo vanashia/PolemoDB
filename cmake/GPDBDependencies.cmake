@@ -8,19 +8,26 @@ find_package(Perl REQUIRED)
 find_package(PkgConfig QUIET)
 if(NOT WIN32)
   find_library(GPDB_M_LIBRARY NAMES m REQUIRED)
+  find_library(GPDB_CRYPT_LIBRARY NAMES crypt)
 endif()
 
 # Keep the generated pg_config.h consistent with the C library headers.  The
 # legacy configure path probes these symbols and port.h only supplies fallback
 # declarations when the corresponding HAVE_* macro is absent.
+set(_gpdb_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
+set(_gpdb_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
 set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+set(CMAKE_REQUIRED_LIBRARIES ${GPDB_M_LIBRARY} ${GPDB_CRYPT_LIBRARY})
 check_symbol_exists(crypt "unistd.h" GPDB_HAVE_CRYPT)
 check_symbol_exists(rint "math.h" GPDB_HAVE_RINT)
 check_symbol_exists(dlopen "dlfcn.h" GPDB_HAVE_DLOPEN)
 check_symbol_exists(strchrnul "string.h" GPDB_HAVE_STRCHRNUL)
 check_symbol_exists(fls "strings.h" GPDB_HAVE_FLS)
 check_symbol_exists(getpeereid "unistd.h" GPDB_HAVE_GETPEEREID)
-unset(CMAKE_REQUIRED_DEFINITIONS)
+set(CMAKE_REQUIRED_DEFINITIONS "${_gpdb_saved_required_definitions}")
+set(CMAKE_REQUIRED_LIBRARIES "${_gpdb_saved_required_libraries}")
+unset(_gpdb_saved_required_definitions)
+unset(_gpdb_saved_required_libraries)
 
 # Keep the generated dynamic shared-memory default consistent with the host.
 # initdb copies postgresql.conf.sample, which defaults to POSIX DSM when
@@ -109,6 +116,9 @@ endif()
 
 add_library(gpdb-platform INTERFACE)
 target_link_libraries(gpdb-platform INTERFACE Threads::Threads ${GPDB_M_LIBRARY})
+if(GPDB_CRYPT_LIBRARY)
+  target_link_libraries(gpdb-platform INTERFACE "${GPDB_CRYPT_LIBRARY}")
+endif()
 if(GPDB_WITH_ZLIB)
   target_link_libraries(gpdb-platform INTERFACE ZLIB::ZLIB)
 endif()
