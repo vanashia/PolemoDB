@@ -10,6 +10,18 @@ if(NOT WIN32)
   find_library(GPDB_M_LIBRARY NAMES m REQUIRED)
 endif()
 
+# Keep the generated pg_config.h consistent with the C library headers.  The
+# legacy configure path probes these symbols and port.h only supplies fallback
+# declarations when the corresponding HAVE_* macro is absent.
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+check_symbol_exists(crypt "unistd.h" GPDB_HAVE_CRYPT)
+check_symbol_exists(rint "math.h" GPDB_HAVE_RINT)
+check_symbol_exists(dlopen "dlfcn.h" GPDB_HAVE_DLOPEN)
+check_symbol_exists(strchrnul "string.h" GPDB_HAVE_STRCHRNUL)
+check_symbol_exists(fls "strings.h" GPDB_HAVE_FLS)
+check_symbol_exists(getpeereid "unistd.h" GPDB_HAVE_GETPEEREID)
+unset(CMAKE_REQUIRED_DEFINITIONS)
+
 # Keep the generated dynamic shared-memory default consistent with the host.
 # initdb copies postgresql.conf.sample, which defaults to POSIX DSM when
 # shm_open() is available.  Without this native probe macOS would generate a

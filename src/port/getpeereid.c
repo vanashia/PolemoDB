@@ -45,7 +45,8 @@ getpeereid(int sock, uid_t *uid, gid_t *gid)
 	*uid = peercred.uid;
 	*gid = peercred.gid;
 	return 0;
-#elif defined(LOCAL_PEERCRED)
+#elif defined(LOCAL_PEERCRED) && \
+	(defined(HAVE_UCRED_H) || defined(HAVE_SYS_UCRED_H))
 	/* Debian with FreeBSD kernel: use getsockopt(LOCAL_PEERCRED) */
 	struct xucred peercred;
 	ACCEPT_TYPE_ARG3 so_len = sizeof(peercred);

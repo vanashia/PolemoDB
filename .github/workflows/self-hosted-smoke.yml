@@ -40,8 +40,7 @@ jobs:
           set -euo pipefail
           command -v cmake ninja ccache pkg-config flex bison
           command -v curl-config
-          test -x /usr/bin/apr-1-config
-          pkg-config --exists libcurl apr-1 libevent yaml-0.1
+          pkg-config --exists libcurl libxml-2.0 xerces-c openssl zlib libbz2 libzstd krb5
 
       - name: Configure runner-local ccache
         shell: bash
@@ -67,7 +66,7 @@ jobs:
             -DGPDB_WITH_ZLIB=ON \
             -DGPDB_WITH_LIBBZ2=ON \
             -DGPDB_WITH_ZSTD=ON \
-            -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
+            -DGPDB_ENABLE_GPFDIST=OFF
 
       - name: Build and install native targets
         run: |
