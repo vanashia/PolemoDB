@@ -10,6 +10,8 @@ if ($ENV{with_ldap} ne 'yes')
 }
 
 my ($slapd, $ldap_bin_dir, $ldap_schema_dir);
+my $slapd_uid = $<;
+my ($slapd_gid) = split /\s+/, $);
 
 $ldap_bin_dir = undef;    # usually in PATH
 
@@ -106,7 +108,8 @@ system_or_bail "openssl", "x509", "-req", "-in", "$slapd_certs/server.csr",
   "-CA", "$slapd_certs/ca.crt", "-CAkey", "$slapd_certs/ca.key",
   "-CAcreateserial", "-out", "$slapd_certs/server.crt";
 
-system_or_bail $slapd, '-f', $slapd_conf, '-h', "$ldap_url $ldaps_url";
+system_or_bail $slapd, '-u', $slapd_uid, '-g', $slapd_gid,
+  '-f', $slapd_conf, '-h', "$ldap_url $ldaps_url";
 
 END
 {

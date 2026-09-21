@@ -22,11 +22,23 @@ include(GPDBDependencies)
 include(GPDBGenerate)
 include(GPDBNativeLibraries)
 include(GPDBBackend)
+include(GPDBLLVM)
 include(GPDBClients)
 include(GPDBGpfdist)
 include(GPDBTests)
+include(GPDBSourceTests)
+
+# gpMgmt uses this helper while creating the production MPP array. Build it
+# natively and install it under libexec, which is where gpcreateseg.sh and
+# gp_bash_functions.sh look for ${GPHOME}/libexec/ifaddrs.
+add_executable(gpdb-ifaddrs gpMgmt/bin/ifaddrs/main.c)
+gpdb_apply_common_options(gpdb-ifaddrs)
+set_target_properties(gpdb-ifaddrs PROPERTIES OUTPUT_NAME ifaddrs)
 
 add_custom_target(gpdb ALL DEPENDS gpdb-server gpdb-clients)
+add_dependencies(gpdb gpdb-ifaddrs)
+add_dependencies(gpdb gpdb-guc-metadata)
+add_dependencies(gpdb-source-test-tools gpdb)
 if(TARGET gpfdist)
   add_dependencies(gpdb gpfdist)
 endif()
@@ -36,7 +48,11 @@ add_dependencies(gpdb gp_exttable_fdw)
 add_dependencies(gpdb gp_toolkit)
 add_dependencies(gpdb gp_ao_co_diagnostics gp_workfile_mgr
   gp_session_state_memory_stats gp_instrument_shmem)
+if(TARGET llvmjit)
+  add_dependencies(gpdb llvmjit llvmjit-types)
+endif()
 add_dependencies(gpdb pageinspect gp_inject_fault gp_debug_numsegments)
+add_dependencies(gpdb ${GPDB_CONVERSION_TARGETS} ${GPDB_SOURCE_EXTENSION_TARGETS})
 if(TARGET gp_zstd_compression)
   add_dependencies(gpdb gp_zstd_compression)
 endif()
@@ -52,6 +68,7 @@ install(TARGETS postgres pg_ctl psql pg_config initdb
 if(TARGET gpfdist)
   install(TARGETS gpfdist RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif()
+install(TARGETS gpdb-ifaddrs RUNTIME DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
 install(TARGETS dict_snowball LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS plpgsql LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS gp_exttable_fdw LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
@@ -59,6 +76,13 @@ install(TARGETS gp_toolkit LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgres
 install(TARGETS gp_ao_co_diagnostics gp_workfile_mgr gp_session_state_memory_stats
   gp_instrument_shmem LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS pageinspect gp_inject_fault gp_debug_numsegments
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+if(TARGET llvmjit)
+  install(TARGETS llvmjit LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+  install(FILES "${GPDB_LLVM_TYPES_BITCODE}"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+endif()
+install(TARGETS ${GPDB_CONVERSION_TARGETS} ${GPDB_SOURCE_EXTENSION_TARGETS}
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 if(TARGET gp_zstd_compression)
   install(TARGETS gp_zstd_compression
@@ -106,11 +130,14 @@ install(FILES
   src/backend/catalog/system_views_gp_summary.sql
   src/backend/catalog/information_schema.sql
   src/backend/catalog/sql_features.txt
-  src/backend/catalog/cdb_schema.sql
   "${GPDB_GENERATED_SYSTEM_VIEWS_GP}"
   "${GPDB_GENERATED_SNOWBALL_CREATE}"
   DESTINATION "${GPDB_INSTALL_DATADIR}")
+install(FILES src/backend/catalog/cdb_schema.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
 install(FILES gpcontrib/gp_toolkit/sql/gp_toolkit.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
+install(FILES contrib/formatter_fixedwidth/fixedwidth.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
 if(GPDB_WITH_ZSTD)
   install(FILES gpcontrib/zstd/zstd_compression.sql
@@ -174,6 +201,30 @@ install(FILES
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments.control
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments--1.0.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+install(FILES
+  contrib/file_fdw/file_fdw.control
+  contrib/file_fdw/file_fdw--1.0.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan.control
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.0.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.0--1.3.1.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.1--1.3.2.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.2--1.3.3.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.3--1.3.4.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.4--1.3.5.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.5--1.3.6.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.6--1.3.7.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.7--1.3.8.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.8--1.3.9.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements sslinfo tsm_system_rows)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control")
+    file(GLOB _source_extension_files
+      "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control"
+      "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}--*.sql")
+    install(FILES ${_source_extension_files}
+      DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+  endif()
+endforeach()
 
 install(FILES
   src/backend/utils/misc/postgresql.conf.sample
@@ -182,6 +233,7 @@ install(FILES
   DESTINATION "${GPDB_INSTALL_DATADIR}")
 install(DIRECTORY src/test/regress/
   DESTINATION "${GPDB_INSTALL_DATADIR}/regress"
+  USE_SOURCE_PERMISSIONS
   FILES_MATCHING
   PATTERN "*.sql"
   PATTERN "*.out"
@@ -191,9 +243,13 @@ install(DIRECTORY src/test/regress/
   PATTERN "*.source"
   PATTERN "*_schedule"
   PATTERN "resultmap"
-  PATTERN "init_file")
+  PATTERN "init_file"
+  PATTERN "test_dbconn.py")
+install(PROGRAMS gpcontrib/pg_hint_plan/sql/maskout.sh
+  DESTINATION "${GPDB_INSTALL_DATADIR}/source-tests/regress/sql")
 install(DIRECTORY "${GPDB_REGRESS_BUILD_DIR}/"
   DESTINATION "${GPDB_INSTALL_DATADIR}/regress"
+  USE_SOURCE_PERMISSIONS
   FILES_MATCHING
   PATTERN "*.pl"
   PATTERN "*.pm"
@@ -214,8 +270,40 @@ install(FILES
   DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(DIRECTORY gpMgmt/bin/
   DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  USE_SOURCE_PERMISSIONS
   FILES_MATCHING PATTERN "*"
+  PATTERN "gp_bash_version.sh.in" EXCLUDE
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "ifaddrs" EXCLUDE
+  PATTERN "gppylib" EXCLUDE)
+install(DIRECTORY gpMgmt/bin/gppylib/
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/python/gppylib"
+  USE_SOURCE_PERMISSIONS
+  FILES_MATCHING
+  PATTERN "*.py"
+  PATTERN "*.json"
+  PATTERN "gpunit"
+  PATTERN "unit2"
   PATTERN "__pycache__" EXCLUDE)
+install(PROGRAMS
+  gpMgmt/sbin/gpconfig_helper.py
+  gpMgmt/sbin/gpoperation.py
+  gpMgmt/sbin/gpsegstop.py
+  gpMgmt/sbin/gpcleansegmentdir.py
+  gpMgmt/sbin/gpgetstatususingtransition.py
+  gpMgmt/sbin/gpsegstart.py
+  gpMgmt/sbin/seg_update_pg_hba.py
+  gpMgmt/sbin/gpsegrecovery.py
+  gpMgmt/sbin/gpsegsetuprecovery.py
+  gpMgmt/sbin/recovery_base.py
+  gpMgmt/sbin/packcore
+  DESTINATION "${CMAKE_INSTALL_SBINDIR}")
+configure_file(
+  "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"
+  @ONLY)
+install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"
+  DESTINATION "${CMAKE_INSTALL_BINDIR}/lib")
 install(FILES
   gpMgmt/bin/pomelodb
   gpMgmt/bin/gpstart
@@ -226,17 +314,18 @@ install(FILES
               GROUP_READ GROUP_EXECUTE
               WORLD_READ WORLD_EXECUTE)
 install(FILES gpMgmt/bin/pomelodb.conf
-  DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  DESTINATION ".")
 
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   "#!/bin/sh\n"
   "GPHOME=\"${CMAKE_INSTALL_PREFIX}\"\n"
   "PATH=\"$GPHOME/bin:$GPHOME/sbin:$PATH\"\n"
-  "LD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$LD_LIBRARY_PATH\"\n"
-  "DYLD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$DYLD_LIBRARY_PATH\"\n"
-  "export GPHOME PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH\n")
+  "PYTHONPATH=\"$GPHOME/lib/python:\${PYTHONPATH:-}\"\n"
+  "LD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:\${LD_LIBRARY_PATH:-}\"\n"
+  "DYLD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:\${DYLD_LIBRARY_PATH:-}\"\n"
+  "export GPHOME PATH PYTHONPATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH\n")
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
-  DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  DESTINATION ".")
 
 add_test(NAME gpdb-cmake-interface
   COMMAND ${CMAKE_COMMAND} -DGPDB_SOURCE_DIR=${CMAKE_SOURCE_DIR}

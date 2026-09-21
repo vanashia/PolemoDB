@@ -44,12 +44,16 @@ jobs:
           sudo apt-get install -y \
             build-essential ccache cmake ninja-build pkg-config flex bison \
             libapr1-dev libevent-dev libyaml-dev libxerces-c-dev libxml2-dev \
-            libkrb5-dev libperl-dev python3-dev python3-psycopg2 \
+            libcurl4-openssl-dev libkrb5-dev libperl-dev python3-dev python3-psycopg2 \
             libreadline-dev zlib1g-dev libbz2-dev libzstd-dev libssl-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install ccache cmake ninja apr libevent libyaml xerces-c pkg-config
+        run: brew install ccache cmake ninja bison apr libevent libyaml xerces-c pkg-config
+
+      - name: Select Homebrew parser tools
+        if: runner.os == 'macOS'
+        run: echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
 
       - name: Configure native CMake build
         shell: bash
@@ -73,7 +77,10 @@ jobs:
             $([[ "$RUNNER_OS" == macOS ]] && printf '%s\n' "-DGPDB_APR_CONFIG=$(brew --prefix apr)/bin/apr-1-config" || printf '%s\n' "-DGPDB_APR_CONFIG=/usr/bin/apr-1-config")
 
       - name: Build native targets
-        run: cmake --build build-ci --target gpdb gpdb-regression-tools --parallel 4
+        run: >-
+          cmake --build build-ci
+          --target gpdb gpdb-regression-tools gpdb-source-test-tools
+          --parallel 4
 
       - name: Install native build
         run: cmake --install build-ci --prefix "$RUNNER_TEMP/pomelodb"

@@ -3860,6 +3860,11 @@ SignalMppBackends(int sig)
 
 		if (MyProc == proc)
 			continue;
+		/* Prepared transactions have a PGPROC entry but no backend process. */
+		if (proc->pid == 0)
+			continue;
+		if (proc->isBackgroundWorker)
+			continue;
 
 		if (proc->mppSessionId > 0)
 		{

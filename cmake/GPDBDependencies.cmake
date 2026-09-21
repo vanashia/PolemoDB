@@ -1,16 +1,156 @@
 include(CheckIncludeFile)
+include(CheckCSourceCompiles)
 include(CheckSymbolExists)
 include(FindPackageHandleStandardArgs)
 
 find_package(Threads REQUIRED)
 find_package(Perl REQUIRED)
+if(GPDB_WITH_PYTHON)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+endif()
 find_package(PkgConfig QUIET)
+
+if(GPDB_WITH_LLVM)
+  find_program(GPDB_LLVM_CONFIG_EXECUTABLE
+    # The GPDB JIT sources in this tree are built and tested with LLVM 14.
+    # Prefer the versioned tool installed by the source-test dependency
+    # script; an unversioned llvm-config may point at a newer system LLVM
+    # whose C API no longer contains the headers used by these sources.
+    NAMES llvm-config-14 llvm-config-13 llvm-config-12 llvm-config-11
+      llvm-config-10 llvm-config-9 llvm-config-8 llvm-config-7
+      llvm-config)
+  if(NOT GPDB_LLVM_CONFIG_EXECUTABLE)
+    message(FATAL_ERROR
+      "llvm-config is required when GPDB_WITH_LLVM=ON")
+  endif()
+  find_program(GPDB_LLVM_CLANG_EXECUTABLE
+    NAMES clang-14 clang-13 clang-12 clang-11 clang-10 clang-9 clang-8
+      clang-7 clang clang-19 clang-18 clang-17 clang-16 clang-15)
+  if(NOT GPDB_LLVM_CLANG_EXECUTABLE)
+    message(FATAL_ERROR "clang is required when GPDB_WITH_LLVM=ON")
+  endif()
+
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --version
+    OUTPUT_VARIABLE GPDB_LLVM_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _gpdb_llvm_version_status)
+  if(_gpdb_llvm_version_status OR NOT GPDB_LLVM_VERSION MATCHES "^[0-9]+\\.")
+    message(FATAL_ERROR "${GPDB_LLVM_CONFIG_EXECUTABLE} does not work")
+  endif()
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --includedir
+    OUTPUT_VARIABLE GPDB_LLVM_INCLUDEDIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  if(NOT EXISTS "${GPDB_LLVM_INCLUDEDIR}/llvm-c/Transforms/IPO.h")
+    message(FATAL_ERROR
+      "${GPDB_LLVM_CONFIG_EXECUTABLE} points to LLVM ${GPDB_LLVM_VERSION}, "
+      "but llvm-c/Transforms/IPO.h is missing; use the LLVM 14 development "
+      "package/toolchain for GPDB_WITH_LLVM")
+  endif()
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --cppflags
+    OUTPUT_VARIABLE _gpdb_llvm_cppflags
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --cxxflags
+    OUTPUT_VARIABLE _gpdb_llvm_cxxflags
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --ldflags
+    OUTPUT_VARIABLE _gpdb_llvm_ldflags
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --libs --system-libs
+    OUTPUT_VARIABLE _gpdb_llvm_libs
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  separate_arguments(GPDB_LLVM_CPPFLAGS UNIX_COMMAND "${_gpdb_llvm_cppflags}")
+  separate_arguments(GPDB_LLVM_CXXFLAGS UNIX_COMMAND "${_gpdb_llvm_cxxflags}")
+  separate_arguments(GPDB_LLVM_LDFLAGS UNIX_COMMAND "${_gpdb_llvm_ldflags}")
+  separate_arguments(GPDB_LLVM_LIBS UNIX_COMMAND "${_gpdb_llvm_libs}")
+  unset(_gpdb_llvm_cppflags)
+  unset(_gpdb_llvm_cxxflags)
+  unset(_gpdb_llvm_ldflags)
+  unset(_gpdb_llvm_libs)
+endif()
+if(NOT WIN32)
+  find_library(GPDB_M_LIBRARY NAMES m REQUIRED)
+  find_library(GPDB_CRYPT_LIBRARY NAMES crypt)
+endif()
+
+# Keep the generated pg_config.h consistent with the C library headers.  The
+# legacy configure path probes these symbols and port.h only supplies fallback
+# declarations when the corresponding HAVE_* macro is absent.
+set(_gpdb_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
+set(_gpdb_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+set(_gpdb_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+set(CMAKE_REQUIRED_LIBRARIES ${GPDB_M_LIBRARY} ${GPDB_CRYPT_LIBRARY})
+check_symbol_exists(crypt "unistd.h" GPDB_HAVE_CRYPT)
+check_symbol_exists(rint "math.h" GPDB_HAVE_RINT)
+check_symbol_exists(dlopen "dlfcn.h" GPDB_HAVE_DLOPEN)
+check_symbol_exists(strchrnul "string.h" GPDB_HAVE_STRCHRNUL)
+check_symbol_exists(fls "strings.h" GPDB_HAVE_FLS)
+check_symbol_exists(getpeereid "unistd.h" GPDB_HAVE_GETPEEREID)
+check_symbol_exists(readlink "unistd.h" GPDB_HAVE_READLINK)
+check_symbol_exists(setsid "unistd.h" GPDB_HAVE_SETSID)
+check_symbol_exists(strerror_r "string.h" GPDB_HAVE_STRERROR_R)
+check_include_file(langinfo.h GPDB_HAVE_LANGINFO_H)
+if(GPDB_HAVE_STRERROR_R)
+  set(CMAKE_REQUIRED_FLAGS "-Werror=incompatible-pointer-types")
+  check_c_source_compiles("#define _GNU_SOURCE
+#include <stddef.h>
+#include <string.h>
+int main(void)
+{
+  int (*strerror_r_int)(int, char *, size_t) = strerror_r;
+  char buffer[64];
+  return strerror_r_int(0, buffer, sizeof(buffer));
+}" GPDB_STRERROR_R_INT)
+endif()
+set(CMAKE_REQUIRED_FLAGS "${_gpdb_saved_required_flags}")
+set(CMAKE_REQUIRED_DEFINITIONS "${_gpdb_saved_required_definitions}")
+set(CMAKE_REQUIRED_LIBRARIES "${_gpdb_saved_required_libraries}")
+unset(_gpdb_saved_required_flags)
+unset(_gpdb_saved_required_definitions)
+unset(_gpdb_saved_required_libraries)
+
+set(_gpdb_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+check_c_source_compiles("#include <ctype.h>
+#include <locale.h>
+#include <wctype.h>
+int main(void)
+{
+  locale_t value = newlocale(LC_ALL_MASK, \"C\", (locale_t) 0);
+  return isalpha_l('a', value) == 0 || iswalpha_l(L'a', value) == 0;
+}"
+  GPDB_HAVE_LOCALE_T)
+set(CMAKE_REQUIRED_DEFINITIONS "${_gpdb_saved_required_definitions}")
+unset(_gpdb_saved_required_definitions)
 
 # Keep the generated dynamic shared-memory default consistent with the host.
 # initdb copies postgresql.conf.sample, which defaults to POSIX DSM when
 # shm_open() is available.  Without this native probe macOS would generate a
 # server that rejects its own freshly initialized configuration.
 check_symbol_exists(shm_open "sys/mman.h" GPDB_HAVE_SHM_OPEN)
+
+# SysV semaphore headers do not consistently declare union semun.  The
+# legacy configure probe detects this type and sysv_sema.c supplies the
+# fallback definition when it is absent, so keep the native CMake path
+# consistent with that behavior on Linux and other SysV platforms.
+if(NOT WIN32)
+check_c_source_compiles("#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+int main(void) { union semun value; value.val = 0; return value.val; }"
+  GPDB_HAVE_UNION_SEMUN)
+endif()
 
 if(GPDB_WITH_ZLIB)
   find_package(ZLIB REQUIRED)
@@ -39,9 +179,25 @@ if(GPDB_WITH_ZSTD)
   find_path(GPDB_ZSTD_INCLUDE_DIR zstd.h REQUIRED)
 endif()
 
+if(GPDB_WITH_LDAP)
+  find_path(GPDB_LDAP_INCLUDE_DIR ldap.h REQUIRED)
+  find_library(GPDB_LDAP_LIBRARY NAMES ldap ldap_r REQUIRED)
+
+  set(_gpdb_saved_required_includes "${CMAKE_REQUIRED_INCLUDES}")
+  set(_gpdb_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+  set(CMAKE_REQUIRED_INCLUDES "${GPDB_LDAP_INCLUDE_DIR}")
+  set(CMAKE_REQUIRED_LIBRARIES "${GPDB_LDAP_LIBRARY}")
+  check_symbol_exists(ldap_initialize "ldap.h" GPDB_HAVE_LDAP_INITIALIZE)
+  set(CMAKE_REQUIRED_INCLUDES "${_gpdb_saved_required_includes}")
+  set(CMAKE_REQUIRED_LIBRARIES "${_gpdb_saved_required_libraries}")
+  unset(_gpdb_saved_required_includes)
+  unset(_gpdb_saved_required_libraries)
+endif()
+
 if(GPDB_WITH_GSSAPI)
   if(APPLE)
     find_library(GPDB_GSS_LIBRARY NAMES gssapi_krb5 REQUIRED)
+    find_library(GPDB_KERBEROS_LIBRARY NAMES Kerberos REQUIRED)
   else()
     find_library(GPDB_GSS_LIBRARY NAMES gssapi_krb5 gssapi REQUIRED)
   endif()
@@ -81,6 +237,9 @@ endif()
 
 add_library(gpdb-platform INTERFACE)
 target_link_libraries(gpdb-platform INTERFACE Threads::Threads ${GPDB_M_LIBRARY})
+if(GPDB_CRYPT_LIBRARY)
+  target_link_libraries(gpdb-platform INTERFACE "${GPDB_CRYPT_LIBRARY}")
+endif()
 if(GPDB_WITH_ZLIB)
   target_link_libraries(gpdb-platform INTERFACE ZLIB::ZLIB)
 endif()
@@ -103,8 +262,15 @@ if(GPDB_WITH_ZSTD)
   target_include_directories(gpdb-platform INTERFACE "${GPDB_ZSTD_INCLUDE_DIR}")
   target_link_libraries(gpdb-platform INTERFACE "${GPDB_ZSTD_LIBRARY}")
 endif()
+if(GPDB_WITH_LDAP)
+  target_include_directories(gpdb-platform INTERFACE "${GPDB_LDAP_INCLUDE_DIR}")
+  target_link_libraries(gpdb-platform INTERFACE "${GPDB_LDAP_LIBRARY}")
+endif()
 if(GPDB_WITH_GSSAPI)
   target_link_libraries(gpdb-platform INTERFACE "${GPDB_GSS_LIBRARY}")
+  if(APPLE)
+    target_link_libraries(gpdb-platform INTERFACE "${GPDB_KERBEROS_LIBRARY}")
+  endif()
 endif()
 if(GPDB_INCLUDES)
   separate_arguments(_gpdb_extra_includes UNIX_COMMAND "${GPDB_INCLUDES}")

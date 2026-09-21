@@ -347,6 +347,14 @@ select relid::regclass as relname, phase, heap_blks_total, heap_blks_scanned, he
 --------------------------
  Success:                 
 (1 row)
+-- Force FTS to observe the stopped mirror instead of relying on the periodic probe.
+-- start_ignore
+2: SELECT wait_for_mirror_down(1::smallint, 30);
+ wait_for_mirror_down 
+----------------------
+ t                    
+(1 row)
+-- end_ignore
 -- Ensure we enter into the target logic which stops cumulative data but
 -- initializes a new vacrelstats at the beginning of post-cleanup phase.
 -- Also all segments should reach to the same "vacuum_worker_changed" point

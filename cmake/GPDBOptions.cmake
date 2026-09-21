@@ -79,6 +79,7 @@ function(gpdb_apply_common_options _target)
     _GNU_SOURCE
     FLOAT4PASSBYVAL=true
     FLOAT8PASSBYVAL=true
+    HAVE_SYMLINK=1
     USE_FLOAT4_BYVAL
     USE_FLOAT8_BYVAL)
   if(GPDB_ENABLE_DEBUG_EXTENSIONS)
@@ -106,6 +107,9 @@ function(gpdb_apply_common_options _target)
   endif()
   if(GPDB_WITH_ZLIB)
     target_compile_definitions(${_target} PRIVATE HAVE_LIBZ)
+  endif()
+  if(GPDB_WITH_LIBCURL)
+    target_compile_definitions(${_target} PRIVATE USE_CURL)
   endif()
   if(GPDB_WITH_ICU)
     target_compile_definitions(${_target} PRIVATE USE_ICU)

@@ -33,7 +33,7 @@ DELETE FROM reindex_crtab_part_ao_btree  WHERE id < 128;
     select gp_segment_id as dbid, relfilenode, oid, relname from pg_class
     where relname like 'reindex_crtab_part_ao_btree%_idx');
 -- Expect two distinct relfilenodes for one segment in old_relfilenodes table.
-3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname;
+3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname order by relname;
 3: COMMIT;
 -- After session 3 commits, session 2 could complete, the relfilenode it assigned to the
 -- "1_prt_de_fault" index is visible to session 3.
@@ -45,7 +45,7 @@ DELETE FROM reindex_crtab_part_ao_btree  WHERE id < 128;
     select gp_segment_id as dbid, relfilenode, oid, relname from pg_class
     where relname like 'reindex_crtab_part_ao_btree%_idx');
 -- Expect three distinct relfilenodes per segment for "1_prt_de_fault" index.
-3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname;
+3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname order by relname;
 
 3: select count(*) from reindex_crtab_part_ao_btree where id = 998;
 3: set enable_seqscan=false;

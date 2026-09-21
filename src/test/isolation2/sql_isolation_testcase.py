@@ -422,7 +422,11 @@ class SQLIsolationExecutor(object):
                         break
                     elif (("the database system is starting up" in str(e) or
                          "the database system is resetting" in str(e) or
-                         "the database system is in recovery mode" in str(e)) and
+                         "the database system is in recovery mode" in str(e) or
+                         "the database system is shutting down" in str(e) or
+                         ("could not connect to server" in str(e) and
+                          ("ECONNREFUSED" in str(e) or
+                           "Connection refused" in str(e)))) and
                         retry > 1):
                         retry -= 1
                         time.sleep(0.1)

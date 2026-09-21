@@ -4,9 +4,10 @@ file(GLOB_RECURSE _gpdb_backend_sources CONFIGURE_DEPENDS
 list(FILTER _gpdb_backend_sources EXCLUDE REGEX "/test/")
 list(FILTER _gpdb_backend_sources EXCLUDE REGEX "/gporca/")
 list(FILTER _gpdb_backend_sources EXCLUDE REGEX "/gpopt/")
-if(NOT GPDB_WITH_LLVM)
-  list(FILTER _gpdb_backend_sources EXCLUDE REGEX "/jit/llvm/")
-endif()
+# llvmjit is a loadable provider, not part of the postgres executable.  Keep
+# all of its C sources out of the backend object list in both configurations;
+# GPDBLLVM.cmake builds the provider separately when enabled.
+list(FILTER _gpdb_backend_sources EXCLUDE REGEX "/jit/llvm/")
 if(NOT GPDB_WITH_GSSAPI)
   list(FILTER _gpdb_backend_sources EXCLUDE REGEX "/(be-gssapi-common|be-secure-gssapi)\\.c$")
 endif()
@@ -78,6 +79,11 @@ list(APPEND _gpdb_backend_sources ${_gpdb_backend_libpq_sources})
 
 add_library(gpdb-backend-objects OBJECT ${_gpdb_backend_sources})
 gpdb_apply_common_options(gpdb-backend-objects)
+if(GPDB_ENABLE_ORCA)
+  target_compile_features(gpdb-backend-objects PRIVATE cxx_std_14)
+  set_property(TARGET gpdb-backend-objects PROPERTY CXX_STANDARD 14)
+  set_property(TARGET gpdb-backend-objects PROPERTY CXX_STANDARD_REQUIRED ON)
+endif()
 target_compile_definitions(gpdb-backend-objects PRIVATE DLSUFFIX=\".so\")
 add_dependencies(gpdb-backend-objects gpdb-generated)
 target_include_directories(gpdb-backend-objects PRIVATE
