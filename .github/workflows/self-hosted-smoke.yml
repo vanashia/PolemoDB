@@ -48,14 +48,32 @@ jobs:
 
           if ((${#missing_tools[@]})); then
             printf 'missing native build tools: %s\n' "${missing_tools[*]}"
-            if [[ "$(id -u)" != 0 ]]; then
-              echo 'The self-hosted runner is not root; install the missing tools before rerunning.'
-              exit 1
+            if [[ "$(id -u)" == 0 ]]; then
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential ccache cmake ninja-build pkg-config flex bison \
+                libcurl4-openssl-dev
+            else
+              # The self-hosted runner is intentionally unprivileged.  Extract
+              # the parser tools into the job's temporary directory instead of
+              # requiring sudo or changing the host installation.
+              tool_root="$RUNNER_TEMP/pomelodb-native-tools"
+              mkdir -p "$tool_root/debs" "$tool_root/root"
+              (
+                cd "$tool_root/debs"
+                apt-get download bison flex m4 libfl2
+              )
+              shopt -s nullglob
+              debs=("$tool_root/debs"/*.deb)
+              ((${#debs[@]}))
+              for deb in "${debs[@]}"; do
+                dpkg-deb -x "$deb" "$tool_root/root"
+              done
+              export PATH="$tool_root/root/usr/bin:$PATH"
+              export LD_LIBRARY_PATH="$tool_root/root/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+              echo "$tool_root/root/usr/bin" >> "$GITHUB_PATH"
+              echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
             fi
-            apt-get update
-            apt-get install -y --no-install-recommends \
-              build-essential ccache cmake ninja-build pkg-config flex bison \
-              libcurl4-openssl-dev
           fi
 
           for tool in "${required_tools[@]}"; do
