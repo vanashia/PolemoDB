@@ -40,7 +40,6 @@ jobs:
           set -euo pipefail
           command -v cmake ninja ccache pkg-config flex bison
           command -v curl-config
-          pkg-config --exists libcurl libxml-2.0 xerces-c openssl zlib libbz2 libzstd krb5
 
       - name: Configure runner-local ccache
         shell: bash
