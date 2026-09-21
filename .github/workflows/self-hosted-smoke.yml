@@ -63,7 +63,7 @@ jobs:
             -DGPDB_WITH_GSSAPI=ON \
             -DGPDB_WITH_OPENSSL=ON \
             -DGPDB_WITH_ZLIB=ON \
-            -DGPDB_WITH_LIBBZ2=ON \
+            -DGPDB_WITH_LIBBZ2=OFF \
             -DGPDB_WITH_ZSTD=ON \
             -DGPDB_ENABLE_GPFDIST=OFF
 
