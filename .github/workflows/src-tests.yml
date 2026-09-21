@@ -132,11 +132,14 @@ jobs:
           EOF
           pomelodb init
           pomelodb start
+          export PGHOST=127.0.0.1
+          export PGPORT=15432
+          export PGDATABASE=postgres
           {
             echo "POMELODB_CLUSTER_ROOT=$cluster_root"
-            echo "PGHOST=127.0.0.1"
-            echo "PGPORT=15432"
-            echo "PGDATABASE=postgres"
+            echo "PGHOST=$PGHOST"
+            echo "PGPORT=$PGPORT"
+            echo "PGDATABASE=$PGDATABASE"
             echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
           } >> "$GITHUB_ENV"
           psql -X -v ON_ERROR_STOP=1 -Atqc \
