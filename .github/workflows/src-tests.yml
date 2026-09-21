@@ -117,6 +117,14 @@ jobs:
           segment1="$cluster_root/segment1"
           segment2="$cluster_root/segment2"
           mkdir -p "$cluster_root/log"
+          dump_cluster_logs() {
+            status=$?
+            echo "--- isolated MPP cluster logs ---"
+            find "$cluster_root" -type f \( -name '*.log' -o -name 'postgresql.conf' \) -print \
+              -exec sh -c 'echo "--- $1"; tail -200 "$1"' _ {} \; || true
+            exit "$status"
+          }
+          trap dump_cluster_logs ERR
           for data_dir in "$coordinator" "$segment0" "$segment1" "$segment2"; do
             initdb -D "$data_dir" --no-locale --encoding=UTF8
           done
@@ -142,6 +150,8 @@ jobs:
             echo "PGDATABASE=$PGDATABASE"
             echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
           } >> "$GITHUB_ENV"
+          psql -X -v ON_ERROR_STOP=1 -Atqc \
+            "select current_setting('gp_role'), current_setting('gp_contentid')"
           psql -X -v ON_ERROR_STOP=1 -Atqc \
             "select current_setting('gp_role'), count(*) from gp_segment_configuration where status='u'"
 
