@@ -37,7 +37,7 @@ install: installdirs
 	for file in $(DATA); do \
 		$(INSTALL_DATA) $$file '$(DESTDIR)$(libdir)/python/gppylib/'$$file ; \
 	done
-	$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/mainUtils.py'
+	$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/mainUtils.py'
 
 uninstall:
 	for file in $(PROGRAMS) $(DATA); do \
@@ -46,4 +46,3 @@ uninstall:
 
 clean distclean:
 	rm -f *.pyc
-

@@ -17,7 +17,7 @@ endif
 
 .PHONY: install-data
 install-data:
-	$(INSTALL_DATA) fixedwidth.sql '$(DESTDIR)$(datadir)/cdb_init.d/fixedwidth.sql'
+	$(INSTALL_DATA) $(srcdir)/fixedwidth.sql '$(DESTDIR)$(datadir)/cdb_init.d/fixedwidth.sql'
 
 install: install-data
 

@@ -1,0 +1,142 @@
+name: Self-hosted Runner Smoke
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: self-hosted-smoke
+  cancel-in-progress: false
+
+jobs:
+  runner-smoke:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    env:
+      BUILD_IMAGE: localhost/mytestdb-build:ubuntu24.04-v1
+      BUILD_LABEL: mytestdb.self-hosted-smoke=true
+      BUILD_CONTAINER: self-hosted-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Verify Debian x64 Docker runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          test -r /etc/debian_version
+          command -v docker
+          docker info >/dev/null
+          docker image inspect "$BUILD_IMAGE" >/dev/null
+          printf 'runner=%s\n' "$RUNNER_NAME"
+          printf 'os=%s\n' "$RUNNER_OS"
+          printf 'arch=%s\n' "$RUNNER_ARCH"
+          printf 'debian=%s\n' "$(cat /etc/debian_version)"
+          printf 'docker_image=%s\n' "$BUILD_IMAGE"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+          fetch-tags: false
+          submodules: false
+          clean: true
+
+      - name: Prepare persistent ccache directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache_root="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}"
+          CCACHE_HOST_DIR="$ccache_root/mytestdb-self-hosted-smoke-ccache"
+          if ! mkdir -p "$CCACHE_HOST_DIR" 2>/dev/null || [ ! -w "$CCACHE_HOST_DIR" ]; then
+            CCACHE_HOST_DIR="$RUNNER_TEMP/mytestdb-self-hosted-smoke-ccache"
+            mkdir -p "$CCACHE_HOST_DIR"
+          fi
+          test -w "$CCACHE_HOST_DIR"
+          printf 'CCACHE_HOST_DIR=%s\n' "$CCACHE_HOST_DIR" >> "$GITHUB_ENV"
+
+      - name: Compile in Docker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # Successful containers are removed below. Failed containers are
+          # retained for logs and artifact inspection. Do not silently delete
+          # retained containers: stop before creating a third one.
+          mapfile -t managed_containers < <(
+            docker ps -aq --filter "label=$BUILD_LABEL"
+          )
+          retained_containers=()
+          for container_id in "${managed_containers[@]}"; do
+            container_status="$(docker inspect --format '{{.State.Status}}' "$container_id")"
+            exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container_id")"
+            if [ "$container_status" = exited ] && [ "$exit_code" -eq 0 ]; then
+              docker rm "$container_id"
+            else
+              retained_containers+=("$container_id")
+            fi
+          done
+
+          if [ "${#retained_containers[@]}" -ge 2 ]; then
+            echo 'Two smoke-build containers are already retained.'
+            echo 'Inspect or remove one manually before retrying:'
+            for container_id in "${retained_containers[@]}"; do
+              docker inspect --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} created={{.Created}}' "$container_id"
+            done
+            exit 1
+          fi
+
+          set +e
+          docker run \
+            --name "$BUILD_CONTAINER" \
+            --label "$BUILD_LABEL" \
+            --init \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/runner-home \
+            --env CCACHE_DIR=/ccache \
+            --env CCACHE_BASEDIR=/workspace \
+            --env CCACHE_COMPILERCHECK=content \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace" \
+            --mount "type=bind,src=$CCACHE_HOST_DIR,dst=/ccache" \
+            "$BUILD_IMAGE" \
+            bash -euo pipefail -c '
+              trap "ccache --show-stats || true" EXIT
+
+              cd /workspace
+              mkdir -p /tmp/runner-home
+
+              cmake -S . -B build-smoke -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_C_FLAGS="-Wno-error=maybe-uninitialized" \
+                -DCMAKE_INSTALL_PREFIX=/workspace/.smoke-install \
+                -DGPDB_LEGACY_BUILD_DIR=/tmp/gpdb-legacy-build-smoke \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DGPDB_CONFIGURE_ENV="CC=ccache gcc;CXX=ccache g++" \
+                -DGPDB_WITH_PERL=ON \
+                -DGPDB_WITH_PYTHON=ON \
+                -DGPDB_WITH_LIBXML=ON \
+                -DGPDB_WITH_GSSAPI=ON \
+                -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
+
+              cmake --build build-smoke \
+                --target gpdb \
+                --parallel 2
+            '
+          status=$?
+          set -e
+
+          if [ "$status" -eq 0 ]; then
+            docker rm "$BUILD_CONTAINER"
+            echo 'Docker compilation succeeded; build container removed.'
+          else
+            echo "Docker compilation failed; container retained: $BUILD_CONTAINER"
+            echo "Inspect logs with: docker logs $BUILD_CONTAINER"
+            echo "Copy artifacts with: docker cp $BUILD_CONTAINER:/workspace/build-smoke ./build-smoke"
+          fi
+
+          exit "$status"

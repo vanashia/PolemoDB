@@ -111,7 +111,7 @@ distprep: bki-stamp
 catalog_json: $(CATALOG_JSON)
 
 $(CATALOG_JSON): process_foreign_keys.pl $(POSTGRES_BKI_SRCS) $(top_srcdir)/src/include/catalog/catversion.h
-	cat $(POSTGRES_BKI_SRCS) $(top_srcdir)/src/include/catalog/catversion.h | $(PERL) process_foreign_keys.pl > $@
+	cat $(POSTGRES_BKI_SRCS) $(top_srcdir)/src/include/catalog/catversion.h | $(PERL) $(srcdir)/process_foreign_keys.pl > $@
 
 generated-header-symlinks: $(top_builddir)/src/include/catalog/header-stamp
 
@@ -157,7 +157,7 @@ install-data: bki-stamp installdirs
 	$(INSTALL_DATA) $(call vpathsearch,postgres.description) '$(DESTDIR)$(datadir)/postgres.description'
 	$(INSTALL_DATA) $(call vpathsearch,postgres.shdescription) '$(DESTDIR)$(datadir)/postgres.shdescription'
 	$(INSTALL_DATA) $(srcdir)/system_views.sql '$(DESTDIR)$(datadir)/system_views.sql'
-	$(INSTALL_DATA) $(srcdir)/$(GP_SYSVIEW_SQL) '$(DESTDIR)$(datadir)/$(GP_SYSVIEW_SQL)'
+	$(INSTALL_DATA) $(call vpathsearch,$(GP_SYSVIEW_SQL)) '$(DESTDIR)$(datadir)/$(GP_SYSVIEW_SQL)'
 	$(INSTALL_DATA) $(srcdir)/system_views_gp_summary.sql '$(DESTDIR)$(datadir)/system_views_gp_summary.sql'
 	$(INSTALL_DATA) $(srcdir)/information_schema.sql '$(DESTDIR)$(datadir)/information_schema.sql'
 	$(INSTALL_DATA) $(call vpathsearch,cdb_schema.sql) '$(DESTDIR)$(datadir)/cdb_init.d/cdb_schema.sql'

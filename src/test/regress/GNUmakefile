@@ -40,7 +40,16 @@ EXTRADEFS = '-DHOST_TUPLE="$(host_tuple)"' \
 
 # Build regression test driver
 
-all: pg_regress$(X) extended_protocol_resqueue
+all: pg_regress$(X) extended_protocol_resqueue \
+	$(CURDIR)/gpdiff.pl $(CURDIR)/gpstringsubs.pl
+
+# VPATH builds place pg_regress in the build tree.  Keep the helper scripts
+# beside it because pg_regress locates them relative to its own executable.
+$(CURDIR)/gpdiff.pl: $(srcdir)/gpdiff.pl
+	rm -f $@ && $(LN_S) $(srcdir)/gpdiff.pl $@
+
+$(CURDIR)/gpstringsubs.pl: $(srcdir)/gpstringsubs.pl
+	rm -f $@ && $(LN_S) $(srcdir)/gpstringsubs.pl $@
 
 pg_regress$(X): pg_regress.o pg_regress_main.o $(WIN32RES) | submake-libpgport
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@
@@ -63,14 +72,14 @@ $(top_builddir)/src/port/pg_config_paths.h: | submake-libpgport
 install: all installdirs
 	$(INSTALL_PROGRAM) pg_regress$(X) '$(DESTDIR)$(pgxsdir)/$(subdir)/pg_regress$(X)'
 	$(INSTALL_PROGRAM) regress.so '$(DESTDIR)$(pkglibdir)/regress.so'
-	$(INSTALL_PROGRAM) gpdiff.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpdiff.pl'
-	$(INSTALL_PROGRAM) gpstringsubs.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpstringsubs.pl'
-	$(INSTALL_PROGRAM) atmsort.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pl'
-	$(INSTALL_PROGRAM) atmsort.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pm'
-	$(INSTALL_PROGRAM) explain.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pl'
-	$(INSTALL_PROGRAM) explain.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pm'
+	$(INSTALL_PROGRAM) $(srcdir)/gpdiff.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpdiff.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/gpstringsubs.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/gpstringsubs.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/atmsort.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/atmsort.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/atmsort.pm'
+	$(INSTALL_PROGRAM) $(srcdir)/explain.pl '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pl'
+	$(INSTALL_PROGRAM) $(srcdir)/explain.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/explain.pm'
 	$(INSTALL_PROGRAM) GPTest.pm '$(DESTDIR)$(pgxsdir)/$(subdir)/GPTest.pm'
-	$(INSTALL_PROGRAM) scan_flaky_fault_injectors.sh '$(DESTDIR)$(pgxsdir)/$(subdir)/scan_flaky_fault_injectors.sh'
+	$(INSTALL_PROGRAM) $(srcdir)/scan_flaky_fault_injectors.sh '$(DESTDIR)$(pgxsdir)/$(subdir)/scan_flaky_fault_injectors.sh'
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(pgxsdir)/$(subdir)'
 
@@ -187,6 +196,10 @@ query_info_hook_test:
 
 REGRESS_OPTS = --dlpath=. --max-concurrent-tests=20 --init-file=$(srcdir)/init_file $(EXTRA_REGRESS_OPTS)
 
+# Keep the default schedules unchanged, but allow CI and local test runners to
+# select a topology-specific schedule without patching this makefile.
+REGRESS_SCHEDULE_OPTS = --schedule=$(srcdir)/parallel_schedule --schedule=$(srcdir)/greenplum_schedule
+
 check: all tablespace-setup
 	$(pg_regress_check) $(REGRESS_OPTS) --schedule=$(srcdir)/parallel_schedule $(MAXCONNOPT) $(EXTRA_TESTS)
 
@@ -201,7 +214,7 @@ installcheck-small: all tablespace-setup
 	$(pg_regress_installcheck) $(REGRESS_OPTS) --schedule=$(srcdir)/parallel_schedule $(EXTRA_TESTS)
 
 installcheck-good: all tablespace-setup twophase_pqexecparams hooktest query_info_hook_test
-	$(pg_regress_installcheck) $(REGRESS_OPTS) --schedule=$(srcdir)/parallel_schedule --schedule=$(srcdir)/greenplum_schedule $(EXTRA_TESTS)
+	$(pg_regress_installcheck) $(REGRESS_OPTS) $(REGRESS_SCHEDULE_OPTS) $(EXTRA_TESTS)
 
 installcheck-parallel: all tablespace-setup
 	$(pg_regress_installcheck) $(REGRESS_OPTS) --schedule=$(srcdir)/parallel_schedule $(MAXCONNOPT) $(EXTRA_TESTS)

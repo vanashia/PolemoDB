@@ -114,10 +114,30 @@ if(GPDB_ENABLE_NATIVE_TARGETS)
   find_package(ZLIB QUIET)
   find_package(BZip2 QUIET)
   find_package(OpenSSL QUIET)
+  if(GPDB_WITH_ZSTD)
+    find_library(GPDB_ZSTD_LIBRARY NAMES zstd REQUIRED)
+  endif()
   find_package(LibXml2 QUIET)
   find_package(CURL QUIET)
   find_package(ICU COMPONENTS uc i18n QUIET)
   find_package(Perl QUIET)
+  if(GPDB_WITH_READLINE)
+    find_path(GPDB_READLINE_INCLUDE_DIR NAMES readline/readline.h)
+    find_library(GPDB_READLINE_LIBRARY NAMES readline)
+  endif()
+  if(GPDB_WITH_GSSAPI)
+    if(APPLE)
+      # GSS.framework does not export the Kerberos OID globals used by
+      # libpq on current Apple SDKs.  They are provided by the SDK's
+      # libgssapi_krb5 stub library instead.
+      if(GPDB_GSS_LIBRARY MATCHES "GSS\\.framework$")
+        unset(GPDB_GSS_LIBRARY CACHE)
+      endif()
+      find_library(GPDB_GSS_LIBRARY NAMES gssapi_krb5 REQUIRED)
+    else()
+      find_library(GPDB_GSS_LIBRARY NAMES gssapi_krb5 gssapi REQUIRED)
+    endif()
+  endif()
   find_program(GPDB_FLEX_EXECUTABLE flex)
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND AND GPDB_WITH_ZSTD)
@@ -161,6 +181,23 @@ if(NOT _gpdb_legacy_relative MATCHES "^\\.\\.")
 endif()
 file(MAKE_DIRECTORY "${GPDB_LEGACY_BUILD_DIR}")
 
+# configure invokes ./getversion from its working directory.  Create a wrapper
+# before the first external VPATH configure, so getversion itself runs from the
+# source root and the configured GP version (and GP_MAJORVERSION) is not empty.
+set(_gpdb_getversion_source "${CMAKE_SOURCE_DIR}/getversion")
+set(_gpdb_getversion_destination "${GPDB_LEGACY_BUILD_DIR}/getversion")
+if(NOT EXISTS "${_gpdb_getversion_source}")
+  message(FATAL_ERROR "missing getversion helper: ${_gpdb_getversion_source}")
+endif()
+if(IS_SYMLINK "${_gpdb_getversion_destination}")
+  file(REMOVE "${_gpdb_getversion_destination}")
+endif()
+file(WRITE "${_gpdb_getversion_destination}"
+     "#!/usr/bin/env bash\nexec \"${_gpdb_getversion_source}\" \"\\$@\"\n")
+file(CHMOD "${_gpdb_getversion_destination}"
+     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
+                 WORLD_READ WORLD_EXECUTE)
+
 if(GPDB_ENABLE_NATIVE_TARGETS)
   if(NOT "${GPDB_CPPFLAGS}" STREQUAL "")
     separate_arguments(_gpdb_native_cppflags UNIX_COMMAND "${GPDB_CPPFLAGS}")
@@ -193,7 +230,12 @@ foreach(_dir IN ITEMS BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR
     LOCALEDIR MANDIR DOCDIR HTMLDIR DVIDIR PDFDIR PSDIR)
   if(DEFINED CMAKE_INSTALL_${_dir} AND NOT "${CMAKE_INSTALL_${_dir}}" STREQUAL "")
     string(TOLOWER "${_dir}" _configure_dir)
-    list(APPEND _configure_args "--${_configure_dir}=${CMAKE_INSTALL_${_dir}}")
+    set(_configure_value "${CMAKE_INSTALL_${_dir}}")
+    if(NOT IS_ABSOLUTE "${_configure_value}")
+      get_filename_component(_configure_value "${_configure_value}" ABSOLUTE
+                             BASE_DIR "${CMAKE_INSTALL_PREFIX}")
+    endif()
+    list(APPEND _configure_args "--${_configure_dir}=${_configure_value}")
   endif()
 endforeach()
 if(NOT "${GPDB_BUILD}" STREQUAL "")
@@ -356,8 +398,10 @@ set(GPDB_CONFIGURE_ENVIRONMENT "${_configure_env}" CACHE INTERNAL
     "Effective configure environment generated from CMake options")
 if(NOT GPDB_SKIP_CONFIGURE)
   file(SHA256 "${CMAKE_SOURCE_DIR}/configure" _gpdb_configure_source_hash)
+  file(SHA256 "${_gpdb_getversion_source}" _gpdb_getversion_source_hash)
+  file(SHA256 "${CMAKE_SOURCE_DIR}/CMakeLists.txt" _gpdb_cmake_source_hash)
   string(SHA256 _gpdb_configure_signature
-         "${_gpdb_configure_source_hash};${_configure_args};${_configure_env}")
+         "${_gpdb_configure_source_hash};${_gpdb_getversion_source_hash};${_gpdb_cmake_source_hash};${_configure_args};${_configure_env}")
   set(_gpdb_configure_signature_file
       "${GPDB_LEGACY_BUILD_DIR}/.gpdb-configure-signature")
   set(_gpdb_configure_required ON)
@@ -417,6 +461,84 @@ if(NOT GPDB_SKIP_CONFIGURE)
     file(CREATE_LINK "${_gpdb_pomelodb_conf_source}"
          "${_gpdb_pomelodb_conf_destination}" SYMBOLIC)
   endif()
+
+  # gpMgmt's Python and shell tools are installed directly from their source
+  # directories.  prep_buildtree links their Makefiles but not the scripts,
+  # which leaves an external VPATH install tree incomplete.  Add only missing
+  # source-file links so configure-generated files in the build tree win.
+  file(GLOB_RECURSE _gpdb_management_sources
+       RELATIVE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/gpMgmt/*")
+  foreach(_gpdb_management_source IN LISTS _gpdb_management_sources)
+    set(_gpdb_management_source_path
+        "${CMAKE_SOURCE_DIR}/${_gpdb_management_source}")
+    if(NOT IS_DIRECTORY "${_gpdb_management_source_path}")
+      set(_gpdb_management_destination
+          "${GPDB_LEGACY_BUILD_DIR}/${_gpdb_management_source}")
+      if(NOT EXISTS "${_gpdb_management_destination}" AND
+         NOT IS_SYMLINK "${_gpdb_management_destination}")
+        get_filename_component(_gpdb_management_destination_dir
+                               "${_gpdb_management_destination}" DIRECTORY)
+        file(MAKE_DIRECTORY "${_gpdb_management_destination_dir}")
+        file(CREATE_LINK "${_gpdb_management_source_path}"
+             "${_gpdb_management_destination}" SYMBOLIC)
+      endif()
+    endif()
+  endforeach()
+
+  # prep_buildtree links only Makefiles, but the SSL test Makefile invokes
+  # scripts and reads certificate configuration from its own build directory.
+  # Keep those source assets available in an external VPATH tree while
+  # preserving any generated files already present there.
+  file(GLOB_RECURSE _gpdb_ssl_test_sources LIST_DIRECTORIES false
+       "${CMAKE_SOURCE_DIR}/src/test/ssl/*")
+  foreach(_gpdb_ssl_test_source IN LISTS _gpdb_ssl_test_sources)
+    file(RELATIVE_PATH _gpdb_ssl_test_relative
+         "${CMAKE_SOURCE_DIR}" "${_gpdb_ssl_test_source}")
+    set(_gpdb_ssl_test_destination
+        "${GPDB_LEGACY_BUILD_DIR}/${_gpdb_ssl_test_relative}")
+    if(NOT EXISTS "${_gpdb_ssl_test_destination}" AND
+       NOT IS_SYMLINK "${_gpdb_ssl_test_destination}")
+      get_filename_component(_gpdb_ssl_test_destination_dir
+                             "${_gpdb_ssl_test_destination}" DIRECTORY)
+      file(MAKE_DIRECTORY "${_gpdb_ssl_test_destination_dir}")
+      file(CREATE_LINK "${_gpdb_ssl_test_source}"
+           "${_gpdb_ssl_test_destination}" SYMBOLIC)
+    endif()
+  endforeach()
+
+  # configure.in creates this Perl module from a source-relative template.
+  # In an external VPATH build that template is not linked by prep_buildtree,
+  # so materialize the configured copy here for gpdiff.pl and pg_regress.
+  set(_gpdb_gptest_template "${CMAKE_SOURCE_DIR}/src/test/regress/GPTest.pm.in")
+  set(_gpdb_gptest_destination
+      "${GPDB_LEGACY_BUILD_DIR}/src/test/regress/GPTest.pm")
+  set(_gpdb_version_file "${GPDB_LEGACY_BUILD_DIR}/VERSION")
+  if(NOT EXISTS "${_gpdb_gptest_template}" OR
+     NOT EXISTS "${_gpdb_version_file}")
+    message(FATAL_ERROR "missing GPTest.pm template or configured VERSION file")
+  endif()
+  file(READ "${_gpdb_version_file}" _gpdb_version)
+  string(STRIP "${_gpdb_version}" _gpdb_version)
+  file(READ "${_gpdb_gptest_template}" _gpdb_gptest_contents)
+  string(REPLACE "##Version: ##" "${_gpdb_version}" _gpdb_gptest_contents
+         "${_gpdb_gptest_contents}")
+  file(WRITE "${_gpdb_gptest_destination}" "${_gpdb_gptest_contents}")
+
+  # configure generates this management shell helper from a source-relative
+  # template.  Materialize it explicitly for an external VPATH build so the
+  # installed gpinitsystem can source it.
+  set(_gpdb_bash_version_template
+      "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in")
+  set(_gpdb_bash_version_destination
+      "${GPDB_LEGACY_BUILD_DIR}/gpMgmt/bin/lib/gp_bash_version.sh")
+  if(NOT EXISTS "${_gpdb_bash_version_template}")
+    message(FATAL_ERROR "missing gp_bash_version.sh template")
+  endif()
+  file(READ "${_gpdb_bash_version_template}" _gpdb_bash_version_contents)
+  string(REPLACE "##version##" "${_gpdb_version}"
+         _gpdb_bash_version_contents "${_gpdb_bash_version_contents}")
+  file(WRITE "${_gpdb_bash_version_destination}"
+       "${_gpdb_bash_version_contents}")
 endif()
 
 add_custom_target(gpdb ALL

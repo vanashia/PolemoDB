@@ -153,7 +153,7 @@ select gp_request_fts_probe_scan();
 (1 row)
 
 -- kill the ftsprobe process.
-!\retcode pkill -f ftsprobe;
+!\retcode pkill -f '[f]tsprobe';
 -- start_ignore
 
 -- end_ignore

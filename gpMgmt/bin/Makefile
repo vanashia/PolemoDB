@@ -25,7 +25,7 @@ installdirs:
 installprograms: installdirs
 	for file in $(PROGRAMS); do \
 		$(INSTALL_SCRIPT) $$file '$(DESTDIR)$(bindir)/'$$file ; \
-		$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(bindir)/'$$file ; \
+		$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(bindir)/'$$file ; \
 	done
 	# Symlink gpcheckcat from bin to bin/lib to maintain backward compatibility
 	if [ ! -L $(DESTDIR)$(bindir)/lib/gpcheckcat  ]; then \

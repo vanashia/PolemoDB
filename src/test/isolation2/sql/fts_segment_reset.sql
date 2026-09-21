@@ -32,6 +32,14 @@ from gp_segment_configuration where role = 'p' and content = 0;
 from gp_segment_configuration where role = 'p' AND content = 0;
 1&:create table fts_reset_t(a int);
 
+-- Ensure the first request has reached the injected fault before starting
+-- the second request. Give the postmaster a short coordinator-side window
+-- to enter RESET; querying the background-writer fault after the panic can
+-- race with the disconnected segment.
+-- start_ignore
+2:select gp_wait_until_triggered_fault('start_prepare', 1, dbid) from gp_segment_configuration where role = 'p' and content = 0;
+-- end_ignore
+2:select pg_sleep(2);
 -- This should fail due to the seg0 in reset mode
 2&:create table fts_reset_t2(a int);
 

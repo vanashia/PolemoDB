@@ -4,7 +4,12 @@ use File::Basename;
 use Cwd 'abs_path';
 $dirname = dirname(abs_path($0));
 
-$foo = `cat ${dirname}/VERSION | tr '-' ' '`;
+my $version_file = "${dirname}/VERSION";
+if (-f $version_file) {
+	$foo = `cat $version_file | tr '-' ' '`;
+} else {
+	$foo = `"${dirname}/getversion" | tr '-' ' '`;
+}
 chop $foo;
 $foo = quotemeta $foo;
 $files = join(" ", @ARGV);

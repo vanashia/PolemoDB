@@ -44,6 +44,15 @@ select gp_inject_fault_infinite('postmaster_server_loop_no_sigkill', 'skip', dbi
 (1 row)
 1&:create table fts_reset_t(a int);  <waiting ...>
 
+-- Ensure the first request has reached the injected fault before starting
+-- the second request. Give the postmaster a short coordinator-side window
+-- to enter RESET; querying the background-writer fault after the panic can
+-- race with the disconnected segment.
+2:select pg_sleep(2);
+ pg_sleep 
+----------
+          
+(1 row)
 -- This should fail due to the seg0 in reset mode
 2&:create table fts_reset_t2(a int);  <waiting ...>
 

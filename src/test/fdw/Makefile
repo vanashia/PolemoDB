@@ -7,7 +7,7 @@ OBJS = extended_protocol_commit_test.o
 REGRESS = extended_protocol_commit_test
 
 
-subdir = src/test/isolation2
+subdir = src/test/fdw
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 NO_PGXS = 1

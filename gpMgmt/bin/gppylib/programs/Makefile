@@ -15,10 +15,10 @@ install: installdirs
 	for file in $(DATA); do \
 		$(INSTALL_DATA) $$file '$(DESTDIR)$(libdir)/python/gppylib/programs/'$$file ; \
 	done
-	$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsAddMirrors.py'
-	$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsRecoverSegment.py'
-	$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsRecoverSegment_triples.py'
-	$(PERL) $(top_builddir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsSystemState.py'
+	$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsAddMirrors.py'
+	$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsRecoverSegment.py'
+	$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsRecoverSegment_triples.py'
+	$(PERL) $(top_srcdir)/putversion '$(DESTDIR)$(libdir)/python/gppylib/programs/clsSystemState.py'
 
 uninstall:
 	for file in $(PROGRAMS) $(DATA); do \

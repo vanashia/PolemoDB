@@ -14,4 +14,8 @@ s/\(pid: \d+\)/\(pid: PID\)/
 m/\(cdbendpointretrieve\.c\:\d+\)/
 s/\(cdbendpointretrieve\.c:\d+\)/\(cdbendpointretrieve\.c:LINE_NUM\)/
 
+# libpq may prepend the endpoint host and port to retrieve authentication errors.
+m/connection to server at ".*".*, port .* failed: FATAL:  retrieve auth token is invalid/
+s/connection to server at ".*".*, port .* failed: FATAL:  retrieve auth token is invalid/FATAL:  retrieve auth token is invalid/
+
 -- end_matchsubs
