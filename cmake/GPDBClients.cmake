@@ -17,8 +17,8 @@ endforeach()
 gpdb_add_frontend_executable(initdb
   src/bin/initdb/initdb.c src/bin/initdb/findtimezone.c
   src/timezone/localtime.c)
-target_link_libraries(initdb PRIVATE libpq)
 target_link_libraries(initdb PRIVATE pgfeutils)
+target_link_libraries(initdb PRIVATE libpq)
 
 gpdb_add_frontend_executable(zic src/timezone/zic.c)
 set(GPDB_GENERATED_TIMEZONE_DIR "${CMAKE_BINARY_DIR}/generated/share/postgresql/timezone")
@@ -174,7 +174,7 @@ gpdb_add_frontend_executable(pg_dumpall
   "${CMAKE_SOURCE_DIR}/src/bin/pg_dump/pg_dumpall.c")
 foreach(_name IN ITEMS pg_dump pg_restore pg_dumpall)
   target_include_directories(${_name} PRIVATE "${CMAKE_SOURCE_DIR}/src/bin/pg_dump")
-  target_link_libraries(${_name} PRIVATE libpq pgfeutils)
+  target_link_libraries(${_name} PRIVATE pgfeutils libpq)
 endforeach()
 
 file(GLOB _rewind_sources CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/bin/pg_rewind/*.c")
@@ -182,7 +182,7 @@ list(APPEND _rewind_sources "${CMAKE_SOURCE_DIR}/src/backend/access/transam/xlog
 gpdb_add_frontend_executable(pg_rewind ${_rewind_sources})
 target_include_directories(pg_rewind PRIVATE "${CMAKE_SOURCE_DIR}/src/bin/pg_rewind"
   "${CMAKE_SOURCE_DIR}/src/backend")
-target_link_libraries(pg_rewind PRIVATE libpq pgfeutils)
+target_link_libraries(pg_rewind PRIVATE pgfeutils libpq)
 
 file(GLOB _waldump_sources CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/src/bin/pg_waldump/*.c"
@@ -239,7 +239,7 @@ foreach(_name IN ITEMS clusterdb createdb createuser dropdb dropuser pg_isready 
   gpdb_add_frontend_executable(${_name}
     ${_script_common_sources} "${CMAKE_SOURCE_DIR}/src/bin/scripts/${_name}.c")
   target_include_directories(${_name} PRIVATE "${CMAKE_SOURCE_DIR}/src/bin/scripts")
-  target_link_libraries(${_name} PRIVATE libpq pgfeutils)
+  target_link_libraries(${_name} PRIVATE pgfeutils libpq)
 endforeach()
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/bin/pgbench/pgbench.c")
@@ -265,7 +265,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/src/bin/pgbench/pgbench.c")
     "${_pgbench_generated_dir}")
   set_source_files_properties(src/bin/pgbench/pgbench.c
     PROPERTIES OBJECT_DEPENDS "${_pgbench_exprparse_h}")
-  target_link_libraries(pgbench PRIVATE libpq pgfeutils)
+  target_link_libraries(pgbench PRIVATE pgfeutils libpq)
 endif()
 
 set(_gpdb_compression_targets)
