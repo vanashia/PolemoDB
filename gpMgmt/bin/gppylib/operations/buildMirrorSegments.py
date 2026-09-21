@@ -1,6 +1,6 @@
 from contextlib import closing
 import os
-import pipes
+import shlex as pipes
 import signal
 import time
 import re

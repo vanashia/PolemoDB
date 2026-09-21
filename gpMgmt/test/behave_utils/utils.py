@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import fileinput
 import os
-import pipes
+import shlex as pipes
 import re
 import signal
 import stat

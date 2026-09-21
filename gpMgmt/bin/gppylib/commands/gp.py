@@ -12,7 +12,7 @@ import base64
 import pickle
 import shlex
 import os.path
-import pipes
+import shlex as pipes
 import subprocess
 
 import re, socket

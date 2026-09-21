@@ -4,7 +4,7 @@
 #
 
 import os
-import pipes
+import shlex as pipes
 
 from gppylib.gplog import *
 from gppylib.gparray import *
