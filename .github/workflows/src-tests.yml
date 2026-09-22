@@ -103,6 +103,9 @@ jobs:
           for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester; do
             test -x "$install_root/bin/$program"
           done
+          test -x "$install_root/libexec/ifaddrs"
+          test -x "$install_root/bin/lib/gpcreateseg.sh"
+          test -x "$install_root/bin/lib/gp_bash_functions.sh"
           for module in regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
             find "$install_root/lib/postgresql" "$install_root/share/postgresql/regress" \
               -name "$module" -type f -print -quit 2>/dev/null | grep -q .
@@ -218,6 +221,8 @@ jobs:
             --env ARTIFACT_DIR=/artifact \
             --env RESULTS_DIR=/results \
             --env SUITE="$SUITE" \
+            --env RESULTS_UID="$(id -u)" \
+            --env RESULTS_GID="$(id -g)" \
             "${proxy_args[@]}" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-build,dst=/artifact,readonly" \

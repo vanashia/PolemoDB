@@ -4,12 +4,24 @@ set -Eeuo pipefail
 : "${ARTIFACT_DIR:?ARTIFACT_DIR is required}"
 : "${RESULTS_DIR:?RESULTS_DIR is required}"
 : "${SUITE:?SUITE is required}"
+: "${RESULTS_UID:?RESULTS_UID is required}"
+: "${RESULTS_GID:?RESULTS_GID is required}"
 
 mkdir -p "$RESULTS_DIR"
 entrypoint_log="$RESULTS_DIR/container-entrypoint.log"
 exec > >(tee -a "$entrypoint_log") 2>&1
 entrypoint_status=0
-trap 'entrypoint_status=$?; echo "container entrypoint exited with status $entrypoint_status"; exit "$entrypoint_status"' EXIT
+trap '
+  entrypoint_status=$?
+  # The test user owns the MPP data and gpAdminLogs. Return the bind-mounted
+  # result tree to the runner user before upload-artifact scans it, otherwise a
+  # failed gpinitsystem can mask its own diagnostics with EACCES.
+  if [[ "$RESULTS_UID" =~ ^[0-9]+$ && "$RESULTS_GID" =~ ^[0-9]+$ ]]; then
+    chown -R "$RESULTS_UID:$RESULTS_GID" "$RESULTS_DIR" 2>/dev/null || true
+  fi
+  echo "container entrypoint exited with status $entrypoint_status"
+  exit "$entrypoint_status"
+' EXIT
 
 printf 'suite=%s\n' "$SUITE"
 printf 'container_user=%s\n' "$(id -un)"

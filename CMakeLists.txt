@@ -27,7 +27,15 @@ include(GPDBGpfdist)
 include(GPDBTests)
 include(GPDBSourceTests)
 
+# gpMgmt uses this helper while creating the production MPP array. Build it
+# natively and install it under libexec, which is where gpcreateseg.sh and
+# gp_bash_functions.sh look for ${GPHOME}/libexec/ifaddrs.
+add_executable(gpdb-ifaddrs gpMgmt/bin/ifaddrs/main.c)
+gpdb_apply_common_options(gpdb-ifaddrs)
+set_target_properties(gpdb-ifaddrs PROPERTIES OUTPUT_NAME ifaddrs)
+
 add_custom_target(gpdb ALL DEPENDS gpdb-server gpdb-clients)
+add_dependencies(gpdb gpdb-ifaddrs)
 add_dependencies(gpdb-source-test-tools gpdb)
 if(TARGET gpfdist)
   add_dependencies(gpdb gpfdist)
@@ -54,6 +62,7 @@ install(TARGETS postgres pg_ctl psql pg_config initdb
 if(TARGET gpfdist)
   install(TARGETS gpfdist RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif()
+install(TARGETS gpdb-ifaddrs RUNTIME DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
 install(TARGETS dict_snowball LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS plpgsql LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS gp_exttable_fdw LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
@@ -216,9 +225,11 @@ install(FILES
   DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(DIRECTORY gpMgmt/bin/
   DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  USE_SOURCE_PERMISSIONS
   FILES_MATCHING PATTERN "*"
   PATTERN "gp_bash_version.sh.in" EXCLUDE
-  PATTERN "__pycache__" EXCLUDE)
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "ifaddrs" EXCLUDE)
 configure_file(
   "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in"
   "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"
