@@ -15,9 +15,14 @@ printf 'suite=%s\n' "$SUITE"
 printf 'container_user=%s\n' "$(id -un)"
 printf 'container_arch=%s\n' "$(uname -m)"
 
-if ! command -v ssh >/dev/null 2>&1 || ! command -v sshd >/dev/null 2>&1; then
+missing_runtime=()
+for command_name in ssh sshd ip less ping rsync ss; do
+  command -v "$command_name" >/dev/null 2>&1 || missing_runtime+=("$command_name")
+done
+if [[ "${#missing_runtime[@]}" -ne 0 ]]; then
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-client openssh-server
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    iproute2 less iputils-ping rsync openssh-client openssh-server
 fi
 
 for command_name in cmake tar useradd runuser ssh ssh-keygen ssh-keyscan sshd; do
@@ -32,10 +37,9 @@ if ! id gpadmin >/dev/null 2>&1; then
   useradd --create-home --home-dir /tmp/runner-home --shell /bin/bash gpadmin
 fi
 mkdir -p /tmp/runner-home "$RESULTS_DIR"
-rm -rf /tmp/pomelodb /tmp/pomelodb-install
+rm -rf /tmp/pomelodb-install
 tar -C /tmp -xzf "$ARTIFACT_DIR/pomelodb-native.tar.gz"
-mv /tmp/pomelodb-install /tmp/pomelodb
-chown -R gpadmin:gpadmin /tmp/runner-home /tmp/pomelodb "$RESULTS_DIR"
+chown -R gpadmin:gpadmin /tmp/runner-home /tmp/pomelodb-install "$RESULTS_DIR"
 
 install -d -m 0755 /run/sshd
 if command -v service >/dev/null 2>&1; then
@@ -47,10 +51,11 @@ fi
 set +e
 runuser -u gpadmin --preserve-environment -- env \
   HOME=/tmp/runner-home \
-  POMELODB_INSTALL_PREFIX=/tmp/pomelodb \
-  SOURCE_TEST_ROOT=/tmp/pomelodb/share/postgresql/source-tests \
+  POMELODB_INSTALL_PREFIX=/tmp/pomelodb-install \
+  SOURCE_TEST_ROOT=/tmp/pomelodb-install/share/postgresql/source-tests \
   RUNNER_TEMP="$RESULTS_DIR" \
   SUITE="$SUITE" \
+  POMELODB_LOCALE=C.UTF-8 \
   POMELODB_SKIP_SSH_START=1 \
   bash -euo pipefail -c '
     bash /workspace/.github/scripts/init-native-source-test-cluster.sh
