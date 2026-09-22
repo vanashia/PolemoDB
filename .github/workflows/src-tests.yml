@@ -87,15 +87,20 @@ jobs:
         run: |
           set -euo pipefail
           artifact="$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
-          tar -tzf "$artifact" >/dev/null
+          verify_root="$RUNNER_TEMP/pomelodb-source-artifact-check"
+          rm -rf "$verify_root"
+          mkdir -p "$verify_root"
+          tar -C "$verify_root" -xzf "$artifact"
+          install_root="$verify_root/pomelodb-install"
           for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester; do
-            tar -tzf "$artifact" | grep -qx "pomelodb-install/bin/$program"
+            test -x "$install_root/bin/$program"
           done
           for module in regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
-            tar -tzf "$artifact" | grep -Eq "pomelodb-install/(lib/postgresql|share/postgresql/regress)/$module"
+            find "$install_root/lib/postgresql" "$install_root/share/postgresql/regress" \
+              -name "$module" -type f -print -quit 2>/dev/null | grep -q .
           done
           for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
-            tar -tzf "$artifact" | grep -q "^pomelodb-install/share/postgresql/source-tests/$suite/"
+            test -d "$install_root/share/postgresql/source-tests/$suite"
           done
 
       - name: Verify packaged native install
