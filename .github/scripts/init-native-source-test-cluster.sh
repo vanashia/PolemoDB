@@ -10,7 +10,16 @@ export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}"
 source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
 export LC_ALL=en_US.UTF-8
 
-sudo service ssh start
+if [[ "${POMELODB_SKIP_SSH_START:-0}" != 1 ]]; then
+  if [[ "${EUID}" -eq 0 ]]; then
+    service ssh start
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo service ssh start
+  else
+    echo 'ssh service must be started by the container entrypoint' >&2
+    exit 1
+  fi
+fi
 install -d -m 700 "$HOME/.ssh"
 if [[ ! -f "$HOME/.ssh/id_ed25519" ]]; then
   ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/id_ed25519"
@@ -59,7 +68,17 @@ ENCODING=UNICODE
 TRUSTED_SHELL=ssh
 EOF
 
-gpinitsystem -c "$RUNNER_TEMP/native-gpinitsystem.conf" -a
+init_log="$cluster_root/gpinitsystem.log"
+set +e
+timeout --foreground --kill-after=30s 15m \
+  gpinitsystem -c "$RUNNER_TEMP/native-gpinitsystem.conf" -a \
+  2>&1 | tee "$init_log"
+init_status="${PIPESTATUS[0]}"
+set -e
+if [[ "$init_status" -ne 0 ]]; then
+  echo "gpinitsystem failed or timed out with status $init_status" >&2
+  exit "$init_status"
+fi
 coordinator_data_directory="$cluster_root/coordinator/gpseg-1"
 export COORDINATOR_DATA_DIRECTORY="$coordinator_data_directory"
 export MASTER_DATA_DIRECTORY="$coordinator_data_directory"
