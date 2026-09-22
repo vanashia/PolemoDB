@@ -86,6 +86,14 @@ pg_regress() {
     --max-concurrent-tests=20 "$@"
 }
 
+stage_source_test_module() {
+  local module_name="$1"
+  local outputdir="$2"
+  local module_path="$POMELODB_INSTALL_PREFIX/lib/postgresql/${module_name}.so"
+  test -r "$module_path"
+  ln -sfn "$module_path" "$outputdir/${module_name}.so"
+}
+
 pg_isolation_regress() {
   local name="$1"
   local inputdir="$2"
@@ -150,18 +158,23 @@ case "$SUITE" in
       --schedule="$SOURCE_TEST_ROOT/isolation2/isolation2_schedule"
     ;;
   fsync)
+    mkdir -p "$results_root/fsync"
+    stage_source_test_module fsync_helper "$results_root/fsync"
     pg_regress fsync "$SOURCE_TEST_ROOT/fsync" "$results_root/fsync" \
-      --load-extension=fsync_helper setup bgwriter_checkpoint
+      setup bgwriter_checkpoint
     ;;
   walrep)
+    mkdir -p "$results_root/walrep"
+    stage_source_test_module gplibpq "$results_root/walrep"
     pg_regress walrep "$SOURCE_TEST_ROOT/walrep" "$results_root/walrep" \
-      --load-extension=gplibpq setup replication_views_mirrored missing_xlog \
+      setup replication_views_mirrored missing_xlog \
       walreceiver generate_ao_xlog generate_aoco_xlog
     ;;
   heap_checksum)
+    mkdir -p "$results_root/heap_checksum"
+    stage_source_test_module heap_checksum_helper "$results_root/heap_checksum"
     pg_regress heap_checksum "$SOURCE_TEST_ROOT/heap_checksum" \
       "$results_root/heap_checksum" \
-      --load-extension=heap_checksum_helper \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       setup heap_checksum_corruption
     ;;
@@ -236,7 +249,7 @@ case "$SUITE" in
     echo "unknown source-test suite: $SUITE" >&2
     record_status invalid-suite 2
     ;;
-esac
+  esac
 
 printf 'suite_status=%s\n' "$suite_status" >> "$status_file"
 exit "$suite_status"
