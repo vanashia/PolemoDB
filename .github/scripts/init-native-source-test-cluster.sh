@@ -76,6 +76,9 @@ timeout --foreground --kill-after=30s 15m \
 init_status="${PIPESTATUS[0]}"
 set -e
 if [[ "$init_status" -ne 0 ]]; then
+  if [[ -d "$HOME/gpAdminLogs" ]]; then
+    cp -a "$HOME/gpAdminLogs" "$cluster_root/" || true
+  fi
   echo "gpinitsystem failed or timed out with status $init_status" >&2
   exit "$init_status"
 fi

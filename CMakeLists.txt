@@ -217,7 +217,14 @@ install(FILES
 install(DIRECTORY gpMgmt/bin/
   DESTINATION "${CMAKE_INSTALL_BINDIR}"
   FILES_MATCHING PATTERN "*"
+  PATTERN "gp_bash_version.sh.in" EXCLUDE
   PATTERN "__pycache__" EXCLUDE)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"
+  @ONLY)
+install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"
+  DESTINATION "${CMAKE_INSTALL_BINDIR}/lib")
 install(FILES
   gpMgmt/bin/pomelodb
   gpMgmt/bin/gpstart

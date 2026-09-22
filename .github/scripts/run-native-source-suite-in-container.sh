@@ -55,7 +55,7 @@ runuser -u gpadmin --preserve-environment -- env \
   SOURCE_TEST_ROOT=/tmp/pomelodb-install/share/postgresql/source-tests \
   RUNNER_TEMP="$RESULTS_DIR" \
   SUITE="$SUITE" \
-  POMELODB_LOCALE=C.UTF-8 \
+  POMELODB_LOCALE=C \
   POMELODB_SKIP_SSH_START=1 \
   bash -euo pipefail -c '
     bash /workspace/.github/scripts/init-native-source-test-cluster.sh

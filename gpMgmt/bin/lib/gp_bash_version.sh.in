@@ -1,4 +1,4 @@
-gp_version="##version##"
+gp_version="@GPDB_VERSION@"
 
 print_version ()
 {
