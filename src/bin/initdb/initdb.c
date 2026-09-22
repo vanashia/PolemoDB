@@ -2105,6 +2105,7 @@ setup_cdb_schema(FILE *cmdfd)
 
 	/* Collect all files with .sql suffix in array. */
 	nscripts = 0;
+	errno = 0;
 	while ((file = readdir(dir)) != NULL)
 	{
 		int			namelen = strlen(file->d_name);
