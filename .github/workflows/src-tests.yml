@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 120
     env:
       BUILD_IMAGE: localhost/mytestdb-build:ubuntu24.04-v1
+      BUILD_DIR: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Verify self-hosted Docker runner
@@ -53,7 +54,8 @@ jobs:
       - name: Prepare build directories
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/pomelodb-source-build" "$RUNNER_TEMP/pomelodb-source-ccache"
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR" "$RUNNER_TEMP/pomelodb-source-ccache"
 
       - name: Build native Debug install in Docker
         run: |
@@ -79,7 +81,7 @@ jobs:
             --env BUILD_ARTIFACT_DIR=/artifact \
             "${proxy_args[@]}" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
-            --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-build,dst=/artifact" \
+            --mount "type=bind,src=$BUILD_DIR,dst=/artifact" \
             --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-ccache,dst=/ccache" \
             "$BUILD_IMAGE" \
             bash -euo pipefail -c '
@@ -89,12 +91,12 @@ jobs:
             '
 
       - name: Verify Docker build artifact exists
-        run: test -s "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
+        run: test -s "$BUILD_DIR/pomelodb-native.tar.gz"
 
       - name: Verify native source-test artifact
         run: |
           set -euo pipefail
-          artifact="$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
+          artifact="$BUILD_DIR/pomelodb-native.tar.gz"
           verify_root="$RUNNER_TEMP/pomelodb-source-artifact-check"
           rm -rf "$verify_root"
           mkdir -p "$verify_root"
@@ -115,7 +117,7 @@ jobs:
           done
 
       - name: Verify packaged native install
-        run: test -s "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
+        run: test -s "$BUILD_DIR/pomelodb-native.tar.gz"
 
       - name: Upload native build artifact
         uses: actions/upload-artifact@v4
@@ -123,7 +125,7 @@ jobs:
           name: pomelodb-native-source-build-${{ github.sha }}
           if-no-files-found: error
           retention-days: 1
-          path: ${{ runner.temp }}/pomelodb-source-build/pomelodb-native.tar.gz
+          path: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}/pomelodb-native.tar.gz
 
       - name: Show ccache statistics
         if: always()
@@ -168,6 +170,10 @@ jobs:
           command -v docker
           docker info >/dev/null
           docker image inspect localhost/mytestdb-build:ubuntu24.04-v1 >/dev/null
+          BUILD_DIR="$RUNNER_TEMP/pomelodb-source-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
 
       - name: Load runner proxy configuration
         run: |
@@ -180,13 +186,22 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download native build artifact
+        id: download-build-artifact
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: pomelodb-native-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/pomelodb-source-build
+          path: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Retry native build artifact download
+        if: steps.download-build-artifact.outcome == 'failure'
+        uses: actions/download-artifact@v4
+        with:
+          name: pomelodb-native-source-build-${{ github.sha }}
+          path: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Extract native install
-        run: test -s "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
+        run: test -s "$BUILD_DIR/pomelodb-native.tar.gz"
 
       - name: Prepare container result directory
         shell: bash
@@ -231,7 +246,7 @@ jobs:
             --env RESULTS_GID="$(id -g)" \
             "${proxy_args[@]}" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
-            --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-build,dst=/artifact,readonly" \
+            --mount "type=bind,src=$BUILD_DIR,dst=/artifact,readonly" \
             --mount "type=bind,src=$RESULTS_DIR,dst=/results" \
             localhost/mytestdb-build:ubuntu24.04-v1 \
             bash /workspace/.github/scripts/run-native-source-suite-in-container.sh
