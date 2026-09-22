@@ -25,8 +25,10 @@ include(GPDBBackend)
 include(GPDBClients)
 include(GPDBGpfdist)
 include(GPDBTests)
+include(GPDBSourceTests)
 
 add_custom_target(gpdb ALL DEPENDS gpdb-server gpdb-clients)
+add_dependencies(gpdb-source-test-tools gpdb)
 if(TARGET gpfdist)
   add_dependencies(gpdb gpfdist)
 endif()
@@ -226,7 +228,7 @@ install(FILES
               GROUP_READ GROUP_EXECUTE
               WORLD_READ WORLD_EXECUTE)
 install(FILES gpMgmt/bin/pomelodb.conf
-  DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  DESTINATION ".")
 
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   "#!/bin/sh\n"
@@ -236,7 +238,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   "DYLD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$DYLD_LIBRARY_PATH\"\n"
   "export GPHOME PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH\n")
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
-  DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  DESTINATION ".")
 
 add_test(NAME gpdb-cmake-interface
   COMMAND ${CMAKE_COMMAND} -DGPDB_SOURCE_DIR=${CMAKE_SOURCE_DIR}

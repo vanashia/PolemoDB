@@ -5,6 +5,8 @@ set -Eeuo pipefail
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 
 export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}"
 source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
 export LC_ALL=en_US.UTF-8
 

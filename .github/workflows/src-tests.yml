@@ -15,7 +15,7 @@ concurrency:
 jobs:
   src-build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Restore ccache
         uses: actions/cache@v4
@@ -51,16 +53,34 @@ jobs:
             -DGPDB_WITH_PYTHON=ON \
             -DGPDB_WITH_OPENSSL=ON \
             -DGPDB_WITH_GSSAPI=ON \
+            -DGPDB_WITH_LDAP=ON \
             -DGPDB_WITH_LIBXML=ON \
             -DGPDB_WITH_ZLIB=ON \
             -DGPDB_WITH_LIBBZ2=ON \
             -DGPDB_WITH_ZSTD=ON \
             -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
-      - name: Build and install native test targets
+      - name: Build and install native database and source-test tools
         run: |
-          cmake --build build-src-tests --target gpdb gpdb-regression-tools --parallel 2
+          set -euo pipefail
+          cmake --build build-src-tests --target gpdb --parallel 2
+          cmake --build build-src-tests --target gpdb-source-test-tools --parallel 2
           cmake --install build-src-tests --prefix "$RUNNER_TEMP/pomelodb"
+
+      - name: Verify native source-test artifact
+        run: |
+          set -euo pipefail
+          install_root="$RUNNER_TEMP/pomelodb"
+          source_root="$install_root/share/postgresql/source-tests"
+          for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester; do
+            test -x "$install_root/bin/$program"
+          done
+          for module in regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
+            test -r "$install_root/lib/postgresql/$module" || test -r "$install_root/share/postgresql/regress/$module"
+          done
+          for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
+            test -d "$source_root/$suite"
+          done
 
       - name: Package native install
         run: |
@@ -81,10 +101,31 @@ jobs:
         if: always()
         run: ccache --show-stats
 
-  src-regression:
+  src-suite:
     needs: src-build
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        suite:
+          - regress
+          - isolation
+          - isolation2
+          - fsync
+          - walrep
+          - heap_checksum
+          - fdw
+          - locale
+          - authentication
+          - recovery
+          - kerberos
+          - ldap
+          - ssl
+          - modules
+          - vacuum_progress_row
+          - vacuum_progress_column
 
     steps:
       - name: Checkout
@@ -102,113 +143,81 @@ jobs:
       - name: Extract native install
         run: tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
 
-      - name: Export native install path
-        run: echo "POMELODB_INSTALL_PREFIX=$RUNNER_TEMP/pomelodb" >> "$GITHUB_ENV"
+      - name: Export native test environment
+        run: |
+          {
+            echo "POMELODB_INSTALL_PREFIX=$RUNNER_TEMP/pomelodb"
+            echo "SOURCE_TEST_ROOT=$RUNNER_TEMP/pomelodb/share/postgresql/source-tests"
+          } >> "$GITHUB_ENV"
 
-      - name: Initialize production MPP test cluster
+      - name: Initialize production MPP test cluster with mirrors
         shell: bash
         run: bash .github/scripts/init-native-source-test-cluster.sh
 
-      - name: Run src/test/regress schedule
-        id: regression
+      - name: Run ${{ matrix.suite }} source-test suite
+        id: suite
+        if: always()
         continue-on-error: true
+        env:
+          SUITE: ${{ matrix.suite }}
         shell: bash
-        run: |
-          set -euo pipefail
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          export LD_LIBRARY_PATH="$POMELODB_INSTALL_PREFIX/lib:$POMELODB_INSTALL_PREFIX/lib/postgresql:${LD_LIBRARY_PATH:-}"
-          echo "psql=$(command -v psql)"
-          psql --version
-          "$POMELODB_INSTALL_PREFIX/bin/pg_regress" --version
-          set -o pipefail
-          mkdir -p "$RUNNER_TEMP/pomelodb-regress-results"
-          export PGOPTIONS='-c optimizer=off'
-          : > "$RUNNER_TEMP/pomelodb-regression.log"
-          : > "$RUNNER_TEMP/pomelodb-regression.status"
+        run: bash .github/scripts/run-native-source-suite.sh
 
-          run_schedule() {
-            local schedule_name="$1"
-            local schedule_status=0
-            echo "===== running $schedule_name =====" | tee -a "$RUNNER_TEMP/pomelodb-regression.log"
-            set +e
-            timeout --foreground --kill-after=60s 45m \
-              "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
-              --inputdir="$GITHUB_WORKSPACE/src/test/regress" \
-              --outputdir="$RUNNER_TEMP/pomelodb-regress-results/$schedule_name" \
-              --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-              --dlpath="$POMELODB_INSTALL_PREFIX/share/postgresql/regress" \
-              --tablespace-dir="$RUNNER_TEMP/pomelodb-regress-results/$schedule_name/tablespace" \
-              --max-concurrent-tests=20 \
-              --init-file="$GITHUB_WORKSPACE/src/test/regress/init_file" \
-              --load-extension=gp_inject_fault \
-              --schedule="$GITHUB_WORKSPACE/src/test/regress/$schedule_name" \
-              > >(tee -a "$RUNNER_TEMP/pomelodb-regression.log") 2>&1 &
-            local regress_pid=$!
-            while kill -0 "$regress_pid" 2>/dev/null; do
-              echo "[$(date -u +%FT%TZ)] $schedule_name still running" \
-                | tee -a "$RUNNER_TEMP/pomelodb-regression.log"
-              sleep 60
-            done
-            wait "$regress_pid"
-            schedule_status=$?
-            set -e
-            printf '%s=%s\n' "$schedule_name" "$schedule_status" \
-              >> "$RUNNER_TEMP/pomelodb-regression.status"
-          }
-
-          run_schedule parallel_schedule
-          run_schedule greenplum_schedule
-
-      - name: Upload regression results
+      - name: Upload ${{ matrix.suite }} artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pomelodb-src-regression-${{ github.run_id }}
+          name: pomelodb-src-${{ matrix.suite }}-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 7
           path: |
-            ${{ runner.temp }}/pomelodb-regression.log
-            ${{ runner.temp }}/pomelodb-regression.status
-            ${{ runner.temp }}/pomelodb-regress-results
-            ${{ runner.temp }}/pomelodb-native-mpp/log
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.log
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.status
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results
+            ${{ runner.temp }}/pomelodb-native-mpp
 
-      - name: Summarize regression failures
+      - name: Summarize ${{ matrix.suite }} failures
         if: always()
         shell: bash
+        env:
+          SUITE: ${{ matrix.suite }}
         run: |
-          status=0
-          if [[ ! -s "$RUNNER_TEMP/pomelodb-regression.status" ]]; then
-            status=1
-            echo 'Regression status file is missing; pg_regress did not complete.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            while IFS='=' read -r schedule_name schedule_status; do
-              if [[ "$schedule_status" != 0 ]]; then
-                status=1
-                echo "$schedule_name exited with status $schedule_status." >> "$GITHUB_STEP_SUMMARY"
-              fi
-            done < "$RUNNER_TEMP/pomelodb-regression.status"
-          fi
-          echo '### src/test/regress summary' >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f "$RUNNER_TEMP/pomelodb-regression.log" ]]; then
-            result_lines="$(grep -Ec '^[[:space:]]+[[:alnum:]_./-]+[[:space:]]+\.\.\.' \
-              "$RUNNER_TEMP/pomelodb-regression.log" || true)"
-            echo "Observed regression result lines: $result_lines" >> "$GITHUB_STEP_SUMMARY"
-            if [[ "$result_lines" -eq 0 ]]; then
-              status=1
-              echo 'No regression test result lines were produced.' >> "$GITHUB_STEP_SUMMARY"
+          set -u
+          status_file="$RUNNER_TEMP/pomelodb-${SUITE}.status"
+          log_file="$RUNNER_TEMP/pomelodb-${SUITE}.log"
+          final_status=1
+          {
+            echo "## $SUITE source-test summary"
+            if [[ ! -s "$status_file" ]]; then
+              echo "The suite produced no status file; initialization or execution failed early."
+            else
+              while IFS='=' read -r name value; do
+                [[ -n "$name" ]] || continue
+                echo "- \`$name\`: \`$value\`"
+                if [[ "$name" == suite_status ]]; then
+                  final_status="$value"
+                fi
+              done < "$status_file"
             fi
-            grep -E '^[[:space:]]+[[:alnum:]_./-]+[[:space:]]+\.\.\.[[:space:]]+FAILED' \
-              "$RUNNER_TEMP/pomelodb-regression.log" >> "$GITHUB_STEP_SUMMARY" || true
-            echo 'Last regression output:' >> "$GITHUB_STEP_SUMMARY"
-            tail -80 "$RUNNER_TEMP/pomelodb-regression.log" >> "$GITHUB_STEP_SUMMARY"
+            if [[ -f "$log_file" ]]; then
+              echo
+              echo '### Failure/error lines'
+              grep -E 'FAILED|ERROR|timed out|No such file|not found|BAIL_OUT' "$log_file" \
+                | tail -n 120 || echo 'No failure marker was observed; inspect the complete artifact.'
+              echo
+              echo '### Last output'
+              tail -80 "$log_file"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$final_status" -ne 0 ]]; then
+            exit 1
           fi
-          exit "$status"
 
-      - name: Stop isolated MPP cluster
+      - name: Stop production MPP test cluster
         if: always()
         shell: bash
         run: |
-          if [[ -n "${COORDINATOR_DATA_DIRECTORY:-}" && -x "$POMELODB_INSTALL_PREFIX/bin/gpstop" ]]; then
+          if [[ -n "${COORDINATOR_DATA_DIRECTORY:-}" && -x "${POMELODB_INSTALL_PREFIX:-}/bin/gpstop" ]]; then
             COORDINATOR_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY" \
               "$POMELODB_INSTALL_PREFIX/bin/gpstop" -a -d "$COORDINATOR_DATA_DIRECTORY" || true
           fi
