@@ -59,10 +59,16 @@ if (COMPILER_HAS_FNO_OMIT_FRAME_POINTER)
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
 endif()
 
-# Turn on GPOS_DEBUG define for DEBUG builds.
+# GPOS_DEBUG changes the ORCA C++ object layout (for example, the memory pool
+# vtables), so it must be enabled consistently in both the ORCA libraries and
+# the GPDB backend objects that include the same headers.  GPDB_ENABLE_CASSERT
+# is applied to the backend objects in GPDBOptions.cmake; mirror it here for
+# the ORCA libraries instead of deriving it from CMAKE_BUILD_TYPE.
 cmake_policy(SET CMP0043 NEW)
 
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DGPOS_DEBUG")
+if(GPDB_ENABLE_CASSERT)
+  add_compile_definitions(GPOS_DEBUG)
+endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   add_compile_options(-DGPOS_Darwin)
