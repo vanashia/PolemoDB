@@ -77,7 +77,10 @@ jobs:
             $([[ "$RUNNER_OS" == macOS ]] && printf '%s\n' "-DGPDB_APR_CONFIG=$(brew --prefix apr)/bin/apr-1-config" || printf '%s\n' "-DGPDB_APR_CONFIG=/usr/bin/apr-1-config")
 
       - name: Build native targets
-        run: cmake --build build-ci --target gpdb gpdb-regression-tools --parallel 4
+        run: >-
+          cmake --build build-ci
+          --target gpdb gpdb-regression-tools gpdb-source-test-tools
+          --parallel 4
 
       - name: Install native build
         run: cmake --install build-ci --prefix "$RUNNER_TEMP/pomelodb"
