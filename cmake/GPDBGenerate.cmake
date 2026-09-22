@@ -26,6 +26,12 @@ math(EXPR _gpdb_xlog_blcksz "${GPDB_WAL_BLOCKSIZE} * 1024")
 string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" _gpdb_pg_version_match "${GPDB_PG_VERSION}")
 math(EXPR _gpdb_pg_version_num "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2}")
 string(REGEX MATCH "^[0-9]+" _gpdb_pg_major "${GPDB_PG_VERSION}")
+
+# Keep the native-generated version string compatible with the legacy
+# configure output consumed by gpMgmt/gppylib.GpVersion.  In particular,
+# SELECT version() must contain the Greenplum version and build token before
+# the compiler/date suffix appended by src/backend/utils/adt/version.c.
+set(GPDB_VERSION_LONG "${GPDB_VERSION} build dev" CACHE INTERNAL "Full GP version" FORCE)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
   set(_gpdb_use_armv8_crc32c ON)
 else()
@@ -48,7 +54,7 @@ add_custom_command(
     -DXLOG_BLCKSZ=${_gpdb_xlog_blcksz}
     -DDEF_PGPORT=${GPDB_PGPORT}
     -DGP_MAJORVERSION=${GPDB_MAJOR_VERSION}
-    -DGP_VERSION=${GPDB_VERSION}
+    -DGP_VERSION=${GPDB_VERSION_LONG}
     -DGP_VERSION_NUM=70000
     -DPG_VERSION_VALUE=${GPDB_PG_VERSION}
     -DPG_MAJORVERSION_VALUE=${_gpdb_pg_major}
@@ -147,7 +153,6 @@ add_custom_command(
     -P ${CMAKE_SOURCE_DIR}/cmake/scripts/generate_pg_config_paths.cmake
   VERBATIM)
 
-set(GPDB_VERSION_LONG "${GPDB_VERSION}" CACHE INTERNAL "Full GP version")
 configure_file("${CMAKE_SOURCE_DIR}/src/include/catalog/gp_version_at_initdb.dat.in"
                "${GPDB_GENERATED_INCLUDE_DIR}/catalog/gp_version_at_initdb.dat" @ONLY)
 
