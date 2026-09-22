@@ -233,6 +233,7 @@ jobs:
           status_file="$results_dir/pomelodb-${SUITE}.status"
           log_file="$results_dir/pomelodb-${SUITE}.log"
           cluster_log="$results_dir/pomelodb-native-mpp/gpinitsystem.log"
+          container_log="$results_dir/container-entrypoint.log"
           final_status=1
           {
             echo "## $SUITE source-test summary"
@@ -260,6 +261,11 @@ jobs:
               echo
               echo '### MPP initialization output'
               tail -120 "$cluster_log"
+            fi
+            if [[ -f "$container_log" ]]; then
+              echo
+              echo '### Container entrypoint output'
+              tail -120 "$container_log"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           if [[ "$final_status" -ne 0 ]]; then
