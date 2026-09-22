@@ -268,9 +268,9 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   "#!/bin/sh\n"
   "GPHOME=\"${CMAKE_INSTALL_PREFIX}\"\n"
   "PATH=\"$GPHOME/bin:$GPHOME/sbin:$PATH\"\n"
-  "PYTHONPATH=\"$GPHOME/lib/python:$PYTHONPATH\"\n"
-  "LD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$LD_LIBRARY_PATH\"\n"
-  "DYLD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$DYLD_LIBRARY_PATH\"\n"
+  "PYTHONPATH=\"$GPHOME/lib/python:\${PYTHONPATH:-}\"\n"
+  "LD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:\${LD_LIBRARY_PATH:-}\"\n"
+  "DYLD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:\${DYLD_LIBRARY_PATH:-}\"\n"
   "export GPHOME PATH PYTHONPATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH\n")
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   DESTINATION ".")
