@@ -72,8 +72,8 @@ runuser -u gpadmin --preserve-environment -- env \
   POMELODB_LOCALE=C \
   POMELODB_SKIP_SSH_START=1 \
   bash -euo pipefail -c '
-    bash /workspace/.github/scripts/init-native-source-test-cluster.sh
-    bash /workspace/.github/scripts/run-native-source-suite.sh
+    source /workspace/.github/scripts/init-native-source-test-cluster.sh
+    source /workspace/.github/scripts/run-native-source-suite.sh
   '
 status="$?"
 set -e
