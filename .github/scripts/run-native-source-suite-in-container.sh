@@ -14,8 +14,18 @@ trap 'entrypoint_status=$?; echo "container entrypoint exited with status $entry
 printf 'suite=%s\n' "$SUITE"
 printf 'container_user=%s\n' "$(id -un)"
 printf 'container_arch=%s\n' "$(uname -m)"
-for command_name in cmake tar useradd runuser ssh ssh-keygen; do
-  command -v "$command_name"
+
+if ! command -v ssh >/dev/null 2>&1 || ! command -v sshd >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-client openssh-server
+fi
+
+for command_name in cmake tar useradd runuser ssh ssh-keygen ssh-keyscan sshd; do
+  if ! command_path="$(command -v "$command_name")"; then
+    echo "missing required command: $command_name" >&2
+    exit 1
+  fi
+  echo "$command_name=$command_path"
 done
 
 if ! id gpadmin >/dev/null 2>&1; then
@@ -27,10 +37,6 @@ tar -C /tmp -xzf "$ARTIFACT_DIR/pomelodb-native.tar.gz"
 mv /tmp/pomelodb-install /tmp/pomelodb
 chown -R gpadmin:gpadmin /tmp/runner-home /tmp/pomelodb "$RESULTS_DIR"
 
-if ! command -v sshd >/dev/null 2>&1; then
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server
-fi
 install -d -m 0755 /run/sshd
 if command -v service >/dev/null 2>&1; then
   service ssh start
