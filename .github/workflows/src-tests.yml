@@ -145,6 +145,7 @@ jobs:
           export PGDATABASE=postgres
           {
             echo "POMELODB_CLUSTER_ROOT=$cluster_root"
+            echo "PATH=$POMELODB_INSTALL_PREFIX/bin:$PATH"
             echo "PGHOST=$PGHOST"
             echo "PGPORT=$PGPORT"
             echo "PGDATABASE=$PGDATABASE"
@@ -160,9 +161,16 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          set -euo pipefail
+          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
+          export LD_LIBRARY_PATH="$POMELODB_INSTALL_PREFIX/lib:$POMELODB_INSTALL_PREFIX/lib/postgresql:${LD_LIBRARY_PATH:-}"
+          echo "psql=$(command -v psql)"
+          psql --version
+          "$POMELODB_INSTALL_PREFIX/bin/pg_regress" --version
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/pomelodb-regress-results"
           export PGOPTIONS='-c optimizer=off'
+          set +e
           "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
             --inputdir="$GITHUB_WORKSPACE/src/test/regress" \
             --outputdir="$RUNNER_TEMP/pomelodb-regress-results" \
@@ -175,7 +183,9 @@ jobs:
             --schedule="$GITHUB_WORKSPACE/src/test/regress/parallel_schedule" \
             --schedule="$GITHUB_WORKSPACE/src/test/regress/greenplum_schedule" \
             2>&1 | tee "$RUNNER_TEMP/pomelodb-regression.log"
-          printf '%s\n' "${PIPESTATUS[0]}" > "$RUNNER_TEMP/pomelodb-regression.status"
+          regression_status="${PIPESTATUS[0]}"
+          set -e
+          printf '%s\n' "$regression_status" > "$RUNNER_TEMP/pomelodb-regression.status"
 
       - name: Upload regression results
         if: always()
@@ -195,13 +205,25 @@ jobs:
         shell: bash
         run: |
           status=0
-          if [[ -f "$RUNNER_TEMP/pomelodb-regression.status" ]]; then
+          if [[ ! -s "$RUNNER_TEMP/pomelodb-regression.status" ]]; then
+            status=1
+            echo 'Regression status file is missing; pg_regress did not complete.' >> "$GITHUB_STEP_SUMMARY"
+          else
             status="$(cat "$RUNNER_TEMP/pomelodb-regression.status")"
           fi
           echo '### src/test/regress summary' >> "$GITHUB_STEP_SUMMARY"
           if [[ -f "$RUNNER_TEMP/pomelodb-regression.log" ]]; then
+            result_lines="$(grep -Ec '^[[:space:]]+[[:alnum:]_./-]+[[:space:]]+\.\.\.' \
+              "$RUNNER_TEMP/pomelodb-regression.log" || true)"
+            echo "Observed regression result lines: $result_lines" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$result_lines" -eq 0 ]]; then
+              status=1
+              echo 'No regression test result lines were produced.' >> "$GITHUB_STEP_SUMMARY"
+            fi
             grep -E '^[[:space:]]+[[:alnum:]_./-]+[[:space:]]+\.\.\.[[:space:]]+FAILED' \
               "$RUNNER_TEMP/pomelodb-regression.log" >> "$GITHUB_STEP_SUMMARY" || true
+            echo 'Last regression output:' >> "$GITHUB_STEP_SUMMARY"
+            tail -80 "$RUNNER_TEMP/pomelodb-regression.log" >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
 
