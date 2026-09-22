@@ -28,6 +28,21 @@ jobs:
           printf 'runner=%s\n' "$RUNNER_NAME"
           printf 'debian=%s\n' "$(cat /etc/debian_version)"
 
+      - name: Load runner proxy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          proxy_env="$({
+            bash --noprofile --rcfile "$HOME/.bashrc" -ic 'env' 2>/dev/null || true
+          } | awk -F= '$1 ~ /^(http|https|all|no)_proxy$/ || $1 ~ /^(HTTP|HTTPS|ALL|NO)_PROXY$/')"
+          if [[ -n "$proxy_env" ]]; then
+            printf '%s\n' "$proxy_env" >> "$GITHUB_ENV"
+            proxy_names="$(printf '%s\n' "$proxy_env" | cut -d= -f1 | paste -sd, -)"
+            printf 'Loaded proxy variables: %s\n' "$proxy_names"
+          else
+            echo 'No proxy variables found in ~/.bashrc'
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
