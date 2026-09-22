@@ -70,7 +70,9 @@ EOF
 
 init_log="$cluster_root/gpinitsystem.log"
 set +e
-timeout --foreground --kill-after=30s 15m \
+# Let timeout own a process group so a timed-out gpinitsystem cannot leave
+# gpstart/ssh/segment children holding the pipeline open.
+timeout --kill-after=30s 15m \
   gpinitsystem -c "$RUNNER_TEMP/native-gpinitsystem.conf" -a \
   2>&1 | tee "$init_log"
 init_status="${PIPESTATUS[0]}"

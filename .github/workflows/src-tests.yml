@@ -12,39 +12,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   src-build:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      BUILD_IMAGE: localhost/mytestdb-build:ubuntu24.04-v1
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
 
     steps:
-      - name: Verify self-hosted Docker runner
-        run: |
-          set -euo pipefail
-          test "$(uname -s)" = Linux
-          test "$(uname -m)" = x86_64
-          test -r /etc/debian_version
-          command -v docker
-          docker info >/dev/null
-          docker image inspect "$BUILD_IMAGE" >/dev/null
-          BUILD_DIR="$RUNNER_TEMP/pomelodb-source-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
-          RESULTS_DIR="$RUNNER_TEMP/pomelodb-${{ matrix.suite }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-results"
-          echo "RESULTS_DIR=$RESULTS_DIR" >> "$GITHUB_ENV"
-          rm -rf "$RESULTS_DIR"
-          mkdir -p "$RESULTS_DIR"
-
-      - name: Load runner proxy configuration
-        run: |
-          set -euo pipefail
-          proxy_env="$({ bash --noprofile --rcfile "$HOME/.bashrc" -ic env 2>/dev/null || true; } \
-            | awk -F= '$1 ~ /^(http|https|all|no)_proxy$/ || $1 ~ /^(HTTP|HTTPS|ALL|NO)_PROXY$/')"
-          [[ -z "$proxy_env" ]] || printf '%s\n' "$proxy_env" >> "$GITHUB_ENV"
-
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -53,78 +35,65 @@ jobs:
       - name: Restore ccache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/pomelodb-source-ccache
+          path: .ccache
           key: src-tests-ccache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**/*.cmake', '**/CMakeLists.txt') }}-${{ github.sha }}
           restore-keys: |
             src-tests-ccache-${{ runner.os }}-
 
-      - name: Prepare build directories
+      - name: Install build dependencies
+        run: bash .github/scripts/source-test-dependencies.sh build
+
+      - name: Configure native Debug build
         run: |
           set -euo pipefail
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR" "$RUNNER_TEMP/pomelodb-source-ccache"
+          cmake -S . -B build-src-tests -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/pomelodb" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DGPDB_ENABLE_DEBUG_EXTENSIONS=ON \
+            -DGPDB_ENABLE_ORCA=ON \
+            -DGPDB_WITH_PERL=ON \
+            -DGPDB_WITH_PYTHON=ON \
+            -DGPDB_WITH_OPENSSL=ON \
+            -DGPDB_WITH_GSSAPI=ON \
+            -DGPDB_WITH_LDAP=ON \
+            -DGPDB_WITH_LIBXML=ON \
+            -DGPDB_WITH_ZLIB=ON \
+            -DGPDB_WITH_LIBBZ2=ON \
+            -DGPDB_WITH_ZSTD=ON \
+            -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
-      - name: Build native Debug install in Docker
-        run: |
-          set -Eeuo pipefail
-          proxy_args=()
-          for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
-            if [[ -n "${!proxy_name+x}" ]]; then
-              proxy_value="${!proxy_name}"
-              if [[ "$proxy_name" != NO_PROXY && "$proxy_name" != no_proxy ]]; then
-                proxy_value="${proxy_value//127.0.0.1/host.docker.internal}"
-                proxy_value="${proxy_value//localhost/host.docker.internal}"
-              fi
-              proxy_args+=(--env "$proxy_name=$proxy_value")
-            fi
-          done
-          docker run --rm --init \
-            --user "$(id -u):$(id -g)" \
-            --add-host host.docker.internal:host-gateway \
-            --env HOME=/tmp/runner-home \
-            --env CCACHE_DIR=/ccache \
-            --env CCACHE_BASEDIR=/workspace \
-            --env CCACHE_COMPILERCHECK=content \
-            --env BUILD_ARTIFACT_DIR=/artifact \
-            "${proxy_args[@]}" \
-            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
-            --mount "type=bind,src=$BUILD_DIR,dst=/artifact" \
-            --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-ccache,dst=/ccache" \
-            "$BUILD_IMAGE" \
-            bash -euo pipefail -c '
-              mkdir -p /tmp/runner-home
-              bash /workspace/.github/scripts/build-native-source-in-container.sh
-              ccache --show-stats
-            '
-
-      - name: Verify Docker build artifact exists
-        run: test -s "$BUILD_DIR/pomelodb-native.tar.gz"
-
-      - name: Verify native source-test artifact
+      - name: Build and install native database and source-test tools
         run: |
           set -euo pipefail
-          artifact="$BUILD_DIR/pomelodb-native.tar.gz"
-          verify_root="$RUNNER_TEMP/pomelodb-source-artifact-check"
-          rm -rf "$verify_root"
-          mkdir -p "$verify_root"
-          tar -C "$verify_root" -xzf "$artifact"
-          install_root="$verify_root/pomelodb-install"
+          cmake --build build-src-tests --target gpdb --parallel 2
+          cmake --build build-src-tests --target gpdb-source-test-tools --parallel 2
+          cmake --install build-src-tests --prefix "$RUNNER_TEMP/pomelodb"
+
+      - name: Verify native source-test install
+        run: |
+          set -euo pipefail
+          install_root="$RUNNER_TEMP/pomelodb"
+          source_root="$install_root/share/postgresql/source-tests"
           for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester; do
             test -x "$install_root/bin/$program"
           done
-          test -x "$install_root/libexec/ifaddrs"
-          test -x "$install_root/bin/lib/gpcreateseg.sh"
-          test -x "$install_root/bin/lib/gp_bash_functions.sh"
           for module in regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
-            find "$install_root/lib/postgresql" "$install_root/share/postgresql/regress" \
-              -name "$module" -type f -print -quit 2>/dev/null | grep -q .
+            test -r "$install_root/lib/postgresql/$module" || \
+              test -r "$install_root/share/postgresql/regress/$module"
           done
           for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
-            test -d "$install_root/share/postgresql/source-tests/$suite"
+            test -d "$source_root/$suite"
           done
 
-      - name: Verify packaged native install
-        run: test -s "$BUILD_DIR/pomelodb-native.tar.gz"
+      - name: Package native install
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pomelodb-source-build"
+          tar -C "$RUNNER_TEMP" -czf \
+            "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz" \
+            pomelodb
 
       - name: Upload native build artifact
         uses: actions/upload-artifact@v4
@@ -132,19 +101,15 @@ jobs:
           name: pomelodb-native-source-build-${{ github.sha }}
           if-no-files-found: error
           retention-days: 1
-          path: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}/pomelodb-native.tar.gz
+          path: ${{ runner.temp }}/pomelodb-source-build/pomelodb-native.tar.gz
 
       - name: Show ccache statistics
         if: always()
-        run: |
-          docker run --rm \
-            --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-ccache,dst=/ccache" \
-            --env CCACHE_DIR=/ccache \
-            "$BUILD_IMAGE" ccache --show-stats || true
+        run: ccache --show-stats
 
   src-suite:
     needs: src-build
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -169,97 +134,40 @@ jobs:
           - vacuum_progress_column
 
     steps:
-      - name: Verify self-hosted Docker runner
-        run: |
-          set -euo pipefail
-          test "$(uname -s)" = Linux
-          test "$(uname -m)" = x86_64
-          command -v docker
-          docker info >/dev/null
-          docker image inspect localhost/mytestdb-build:ubuntu24.04-v1 >/dev/null
-          BUILD_DIR="$RUNNER_TEMP/pomelodb-source-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
-
-      - name: Load runner proxy configuration
-        run: |
-          set -euo pipefail
-          proxy_env="$({ bash --noprofile --rcfile "$HOME/.bashrc" -ic env 2>/dev/null || true; } \
-            | awk -F= '$1 ~ /^(http|https|all|no)_proxy$/ || $1 ~ /^(HTTP|HTTPS|ALL|NO)_PROXY$/')"
-          [[ -z "$proxy_env" ]] || printf '%s\n' "$proxy_env" >> "$GITHUB_ENV"
-
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Download native build artifact
-        id: download-build-artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: pomelodb-native-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Install runtime dependencies
+        run: bash .github/scripts/source-test-dependencies.sh runtime
 
-      - name: Retry native build artifact download
-        if: steps.download-build-artifact.outcome == 'failure'
+      - name: Download native build artifact
         uses: actions/download-artifact@v4
         with:
           name: pomelodb-native-source-build-${{ github.sha }}
-          path: ${{ runner.temp }}/pomelodb-source-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pomelodb-source-build
 
       - name: Extract native install
-        run: test -s "$BUILD_DIR/pomelodb-native.tar.gz"
+        run: tar -C "$RUNNER_TEMP" -xzf "$RUNNER_TEMP/pomelodb-source-build/pomelodb-native.tar.gz"
 
-      - name: Prepare container result directory
-        shell: bash
+      - name: Export native test environment
         run: |
-          set -euo pipefail
-          # Self-hosted runners retain RUNNER_TEMP between jobs.  Use a
-          # run-unique directory so a failed gpinitsystem cannot make the
-          # next attempt reject an already existing coordinator data dir.
-          RESULTS_DIR="$RUNNER_TEMP/pomelodb-${{ matrix.suite }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-results"
-          echo "RESULTS_DIR=$RESULTS_DIR" >> "$GITHUB_ENV"
-          rm -rf "$RESULTS_DIR"
-          mkdir -p "$RESULTS_DIR"
+          {
+            echo "POMELODB_INSTALL_PREFIX=$RUNNER_TEMP/pomelodb"
+            echo "SOURCE_TEST_ROOT=$RUNNER_TEMP/pomelodb/share/postgresql/source-tests"
+          } >> "$GITHUB_ENV"
+
+      - name: Initialize production MPP test cluster with mirrors
+        if: always()
+        shell: bash
+        run: bash .github/scripts/init-native-source-test-cluster.sh
 
       - name: Run ${{ matrix.suite }} source-test suite
         id: suite
         if: always()
-        continue-on-error: true
         env:
           SUITE: ${{ matrix.suite }}
         shell: bash
-        run: |
-          set -Eeuo pipefail
-          proxy_args=()
-          for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
-            if [[ -n "${!proxy_name+x}" ]]; then
-              proxy_value="${!proxy_name}"
-              if [[ "$proxy_name" != NO_PROXY && "$proxy_name" != no_proxy ]]; then
-                proxy_value="${proxy_value//127.0.0.1/host.docker.internal}"
-                proxy_value="${proxy_value//localhost/host.docker.internal}"
-              fi
-              proxy_args+=(--env "$proxy_name=$proxy_value")
-            fi
-          done
-          set +e
-          docker run --rm --init \
-            --add-host host.docker.internal:host-gateway \
-            --env HOME=/tmp/runner-home \
-            --env ARTIFACT_DIR=/artifact \
-            --env RESULTS_DIR=/results \
-            --env SUITE="$SUITE" \
-            --env RESULTS_UID="$(id -u)" \
-            --env RESULTS_GID="$(id -g)" \
-            "${proxy_args[@]}" \
-            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
-            --mount "type=bind,src=$BUILD_DIR,dst=/artifact,readonly" \
-            --mount "type=bind,src=$RESULTS_DIR,dst=/results" \
-            localhost/mytestdb-build:ubuntu24.04-v1 \
-            bash /workspace/.github/scripts/run-native-source-suite-in-container.sh
-          status="$?"
-          set -e
-          exit "$status"
+        run: bash .github/scripts/run-native-source-suite.sh
 
       - name: Upload ${{ matrix.suite }} artifacts
         if: always()
@@ -268,7 +176,11 @@ jobs:
           name: pomelodb-src-${{ matrix.suite }}-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 7
-          path: ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-${{ github.run_id }}-${{ github.run_attempt }}-results
+          path: |
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.log
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.status
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results
+            ${{ runner.temp }}/pomelodb-native-mpp
 
       - name: Summarize ${{ matrix.suite }} failures
         if: always()
@@ -277,14 +189,14 @@ jobs:
           SUITE: ${{ matrix.suite }}
         run: |
           set -u
-          results_dir="$RESULTS_DIR"
-          status_file="$results_dir/pomelodb-${SUITE}.status"
-          log_file="$results_dir/pomelodb-${SUITE}.log"
-          cluster_log="$results_dir/pomelodb-native-mpp/gpinitsystem.log"
-          container_log="$results_dir/container-entrypoint.log"
+          status_file="$RUNNER_TEMP/pomelodb-${SUITE}.status"
+          log_file="$RUNNER_TEMP/pomelodb-${SUITE}.log"
+          cluster_log="$RUNNER_TEMP/pomelodb-native-mpp/gpinitsystem.log"
           final_status=1
+          suite_step_outcome="${{ steps.suite.outcome }}"
           {
             echo "## $SUITE source-test summary"
+            echo "- Suite step outcome: \`$suite_step_outcome\`"
             if [[ ! -s "$status_file" ]]; then
               echo "The suite produced no status file; initialization or execution failed early."
             else
@@ -299,7 +211,7 @@ jobs:
             if [[ -f "$log_file" ]]; then
               echo
               echo '### Failure/error lines'
-              grep -E 'FAILED|ERROR|timed out|No such file|not found|BAIL_OUT' "$log_file" \
+              grep -E 'FAILED|ERROR|timed out|No such file|not found|BAIL_OUT|Terminated' "$log_file" \
                 | tail -n 120 || echo 'No failure marker was observed; inspect the complete artifact.'
               echo
               echo '### Last output'
@@ -310,16 +222,74 @@ jobs:
               echo '### MPP initialization output'
               tail -120 "$cluster_log"
             fi
-            if [[ -f "$container_log" ]]; then
-              echo
-              echo '### Container entrypoint output'
-              tail -120 "$container_log"
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$final_status" -ne 0 ]]; then
+          if [[ "$suite_step_outcome" != success || "$final_status" -ne 0 ]]; then
             exit 1
           fi
 
       - name: Stop production MPP test cluster
         if: always()
-        run: echo 'Cluster teardown is performed inside the Docker test container.'
+        run: |
+          if [[ -n "${COORDINATOR_DATA_DIRECTORY:-}" && -x "${POMELODB_INSTALL_PREFIX:-}/bin/gpstop" ]]; then
+            COORDINATOR_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY" \
+              "$POMELODB_INSTALL_PREFIX/bin/gpstop" -a -d "$COORDINATOR_DATA_DIRECTORY" || true
+          fi
+
+  src-summary:
+    if: always()
+    needs: [src-build, src-suite]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Summarize source-test matrix
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const expected = [
+              'regress', 'isolation', 'isolation2', 'fsync', 'walrep',
+              'heap_checksum', 'fdw', 'locale', 'authentication', 'recovery',
+              'kerberos', 'ldap', 'ssl', 'modules', 'vacuum_progress_row',
+              'vacuum_progress_column'
+            ];
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100
+              }
+            );
+            const suiteJobs = new Map();
+            for (const job of jobs) {
+              const match = /^src-suite \((.+)\)$/.exec(job.name);
+              if (match) suiteJobs.set(match[1], job);
+            }
+            const rows = expected.map((suite) => {
+              const job = suiteJobs.get(suite);
+              return [
+                suite,
+                job ? job.status : 'missing',
+                job?.conclusion || 'missing',
+                job?.html_url || ''
+              ];
+            });
+            const failures = rows.filter((row) => row[2] !== 'success');
+            await core.summary
+              .addHeading('PomeloDB source-test matrix')
+              .addTable([
+                [
+                  {data: 'Suite', header: true},
+                  {data: 'Status', header: true},
+                  {data: 'Conclusion', header: true},
+                  {data: 'Job', header: true}
+                ],
+                ...rows.map((row) => [
+                  row[0], row[1], row[2], row[3] ? `[open](${row[3]})` : ''
+                ])
+              ])
+              .addRaw(`\nFailed or missing suites: ${failures.length}\n`)
+              .write();
+            if (failures.length > 0) {
+              core.setFailed(failures.map((row) => `${row[0]}=${row[2]}`).join(', '));
+            }

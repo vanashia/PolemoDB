@@ -31,6 +31,32 @@ mkdir -p "$results_root"
 : > "$status_file"
 
 suite_status=0
+current_command=""
+
+record_signal_failure() {
+  local signal_name="$1"
+  local signal_number="$2"
+  local signal_status=$((128 + signal_number))
+  printf 'suite_signal=%s\n' "$signal_name" >> "$status_file"
+  printf 'suite_signal_status=%s\n' "$signal_status" >> "$status_file"
+  printf 'suite_status=1\n' >> "$status_file"
+  suite_status=1
+  if [[ -n "$current_command" ]]; then
+    printf '%s=%s\n' "$current_command" "$signal_status" >> "$status_file"
+  fi
+}
+
+handle_suite_signal() {
+  local signal_name="$1"
+  local signal_number="$2"
+  record_signal_failure "$signal_name" "$signal_number"
+  trap - "$signal_name"
+  kill -"$signal_name" "$$"
+}
+
+trap 'handle_suite_signal TERM 15' TERM
+trap 'handle_suite_signal INT 2' INT
+trap 'handle_suite_signal HUP 1' HUP
 
 record_status() {
   local name="$1"
@@ -46,12 +72,16 @@ run_command() {
   local duration="$2"
   shift 2
   echo "===== $name =====" | tee -a "$log_file"
+  current_command="$name"
   set +e
-  timeout --foreground --kill-after=60s "$duration" "$@" \
+  # Do not use --foreground: timeout must create a process group and clean up
+  # descendants such as psql and pg_regress helpers when a suite hangs.
+  timeout --kill-after=60s "$duration" "$@" \
     2>&1 | tee -a "$log_file"
   local status="${PIPESTATUS[0]}"
   set -e
   record_status "$name" "$status"
+  current_command=""
   return 0
 }
 
@@ -61,12 +91,14 @@ run_in_directory() {
   local directory="$3"
   shift 3
   echo "===== $name (cwd=$directory) =====" | tee -a "$log_file"
+  current_command="$name"
   set +e
-  (cd "$directory" && timeout --foreground --kill-after=60s "$duration" "$@") \
+  (cd "$directory" && timeout --kill-after=60s "$duration" "$@") \
     2>&1 | tee -a "$log_file"
   local status="${PIPESTATUS[0]}"
   set -e
   record_status "$name" "$status"
+  current_command=""
   return 0
 }
 

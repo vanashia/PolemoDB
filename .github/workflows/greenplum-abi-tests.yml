@@ -124,7 +124,6 @@ jobs:
           path: abi
 
       - name: Compare ABI
-        continue-on-error: true
         run: |
           abi-compliance-checker \
             -l PomeloDB \

@@ -141,7 +141,8 @@ jobs:
                 -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
               cmake --build /tmp/pomelodb-build \
-                --target gpdb gpdb-regression-tools --parallel 2
+                --target gpdb gpdb-regression-tools gpdb-source-test-tools \
+                --parallel 2
               cmake --install /tmp/pomelodb-build --prefix /tmp/pomelodb-install
               ctest --test-dir /tmp/pomelodb-build --output-on-failure
               python3 -m py_compile /tmp/pomelodb-install/bin/pomelodb

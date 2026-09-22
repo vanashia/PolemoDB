@@ -37,7 +37,7 @@ if [[ "${#missing_runtime[@]}" -ne 0 ]]; then
     iproute2 less iputils-ping rsync openssh-client openssh-server
 fi
 
-for command_name in cmake tar useradd runuser ssh ssh-keygen ssh-keyscan sshd; do
+for command_name in cmake tar useradd runuser ssh ssh-keygen ssh-keyscan sshd timeout; do
   if ! command_path="$(command -v "$command_name")"; then
     echo "missing required command: $command_name" >&2
     exit 1
