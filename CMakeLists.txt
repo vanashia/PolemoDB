@@ -230,6 +230,12 @@ install(DIRECTORY gpMgmt/bin/
   PATTERN "gp_bash_version.sh.in" EXCLUDE
   PATTERN "__pycache__" EXCLUDE
   PATTERN "ifaddrs" EXCLUDE)
+install(DIRECTORY gpMgmt/sbin/
+  DESTINATION "${CMAKE_INSTALL_SBINDIR}"
+  USE_SOURCE_PERMISSIONS
+  FILES_MATCHING PATTERN "*"
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE)
 configure_file(
   "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in"
   "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"

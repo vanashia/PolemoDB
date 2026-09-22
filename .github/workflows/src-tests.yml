@@ -33,6 +33,10 @@ jobs:
           echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
+          RESULTS_DIR="$RUNNER_TEMP/pomelodb-${{ matrix.suite }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-results"
+          echo "RESULTS_DIR=$RESULTS_DIR" >> "$GITHUB_ENV"
+          rm -rf "$RESULTS_DIR"
+          mkdir -p "$RESULTS_DIR"
 
       - name: Load runner proxy configuration
         run: |
