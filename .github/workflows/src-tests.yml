@@ -105,56 +105,9 @@ jobs:
       - name: Export native install path
         run: echo "POMELODB_INSTALL_PREFIX=$RUNNER_TEMP/pomelodb" >> "$GITHUB_ENV"
 
-      - name: Initialize and start isolated MPP cluster
+      - name: Initialize production MPP test cluster
         shell: bash
-        run: |
-          set -Eeuo pipefail
-          export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
-          export LD_LIBRARY_PATH="$POMELODB_INSTALL_PREFIX/lib:$POMELODB_INSTALL_PREFIX/lib/postgresql:${LD_LIBRARY_PATH:-}"
-          cluster_root="$RUNNER_TEMP/pomelodb-native-mpp"
-          coordinator="$cluster_root/coordinator"
-          segment0="$cluster_root/segment0"
-          segment1="$cluster_root/segment1"
-          segment2="$cluster_root/segment2"
-          mkdir -p "$cluster_root/log"
-          dump_cluster_logs() {
-            status=$?
-            echo "--- isolated MPP cluster logs ---"
-            find "$cluster_root/log" -type f -print \
-              -exec sh -c 'echo "--- $1"; tail -200 "$1"' _ {} \; || true
-            exit "$status"
-          }
-          trap dump_cluster_logs ERR
-          for data_dir in "$coordinator" "$segment0" "$segment1" "$segment2"; do
-            initdb -D "$data_dir" --no-locale --encoding=UTF8
-          done
-          cat > "$POMELODB_INSTALL_PREFIX/pomelodb.conf" <<EOF
-          cluster_mode=mpp
-          coordinator_data_directory=$coordinator
-          segment_data_directories=$segment0,$segment1,$segment2
-          log_directory=$cluster_root/log
-          coordinator_port=15432
-          segment_ports=16000,16001,16002
-          stop_mode=fast
-          wait=true
-          EOF
-          pomelodb init
-          pomelodb start
-          export PGHOST=127.0.0.1
-          export PGPORT=15432
-          export PGDATABASE=postgres
-          {
-            echo "POMELODB_CLUSTER_ROOT=$cluster_root"
-            echo "PATH=$POMELODB_INSTALL_PREFIX/bin:$PATH"
-            echo "PGHOST=$PGHOST"
-            echo "PGPORT=$PGPORT"
-            echo "PGDATABASE=$PGDATABASE"
-            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-          } >> "$GITHUB_ENV"
-          PGOPTIONS='-c optimizer=off' psql -X -v ON_ERROR_STOP=1 -Atqc \
-            "select current_setting('gp_role'), current_setting('gp_contentid')"
-          PGOPTIONS='-c optimizer=off' psql -X -v ON_ERROR_STOP=1 -Atqc \
-            "select current_setting('gp_role'), count(*) from gp_segment_configuration where status='u'"
+        run: bash .github/scripts/init-native-source-test-cluster.sh
 
       - name: Run src/test/regress schedule
         id: regression
@@ -255,6 +208,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [[ -x "$POMELODB_INSTALL_PREFIX/bin/pomelodb" ]]; then
-            "$POMELODB_INSTALL_PREFIX/bin/pomelodb" stop || true
+          if [[ -n "${COORDINATOR_DATA_DIRECTORY:-}" && -x "$POMELODB_INSTALL_PREFIX/bin/gpstop" ]]; then
+            COORDINATOR_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY" \
+              "$POMELODB_INSTALL_PREFIX/bin/gpstop" -a -d "$COORDINATOR_DATA_DIRECTORY" || true
           fi
