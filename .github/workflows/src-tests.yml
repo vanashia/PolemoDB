@@ -60,10 +60,18 @@ jobs:
           set -Eeuo pipefail
           proxy_args=()
           for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
-            [[ -n "${!proxy_name+x}" ]] && proxy_args+=(--env "$proxy_name=${!proxy_name}")
+            if [[ -n "${!proxy_name+x}" ]]; then
+              proxy_value="${!proxy_name}"
+              if [[ "$proxy_name" != NO_PROXY && "$proxy_name" != no_proxy ]]; then
+                proxy_value="${proxy_value//127.0.0.1/host.docker.internal}"
+                proxy_value="${proxy_value//localhost/host.docker.internal}"
+              fi
+              proxy_args+=(--env "$proxy_name=$proxy_value")
+            fi
           done
           docker run --rm --init \
             --user "$(id -u):$(id -g)" \
+            --add-host host.docker.internal:host-gateway \
             --env HOME=/tmp/runner-home \
             --env CCACHE_DIR=/ccache \
             --env CCACHE_BASEDIR=/workspace \
@@ -194,10 +202,18 @@ jobs:
           set -Eeuo pipefail
           proxy_args=()
           for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
-            [[ -n "${!proxy_name+x}" ]] && proxy_args+=(--env "$proxy_name=${!proxy_name}")
+            if [[ -n "${!proxy_name+x}" ]]; then
+              proxy_value="${!proxy_name}"
+              if [[ "$proxy_name" != NO_PROXY && "$proxy_name" != no_proxy ]]; then
+                proxy_value="${proxy_value//127.0.0.1/host.docker.internal}"
+                proxy_value="${proxy_value//localhost/host.docker.internal}"
+              fi
+              proxy_args+=(--env "$proxy_name=$proxy_value")
+            fi
           done
           set +e
           docker run --rm --init \
+            --add-host host.docker.internal:host-gateway \
             --env HOME=/tmp/runner-home \
             --env ARTIFACT_DIR=/artifact \
             --env RESULTS_DIR=/results \
