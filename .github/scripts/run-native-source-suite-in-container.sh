@@ -63,6 +63,8 @@ fi
 set +e
 runuser -u gpadmin --preserve-environment -- env \
   HOME=/tmp/runner-home \
+  USER=gpadmin \
+  LOGNAME=gpadmin \
   POMELODB_INSTALL_PREFIX=/tmp/pomelodb-install \
   SOURCE_TEST_ROOT=/tmp/pomelodb-install/share/postgresql/source-tests \
   RUNNER_TEMP="$RESULTS_DIR" \
