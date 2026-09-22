@@ -137,6 +137,8 @@ jobs:
     needs: src-build
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 120
+    env:
+      RESULTS_DIR: ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-${{ github.run_id }}-${{ github.run_attempt }}-results
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -192,7 +194,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/pomelodb-${{ matrix.suite }}-results"
+          # Self-hosted runners retain RUNNER_TEMP between jobs.  Use a
+          # run-unique directory so a failed gpinitsystem cannot make the
+          # next attempt reject an already existing coordinator data dir.
+          rm -rf "$RESULTS_DIR"
+          mkdir -p "$RESULTS_DIR"
 
       - name: Run ${{ matrix.suite }} source-test suite
         id: suite
@@ -226,7 +232,7 @@ jobs:
             "${proxy_args[@]}" \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/pomelodb-source-build,dst=/artifact,readonly" \
-            --mount "type=bind,src=$RUNNER_TEMP/pomelodb-${SUITE}-results,dst=/results" \
+            --mount "type=bind,src=$RESULTS_DIR,dst=/results" \
             localhost/mytestdb-build:ubuntu24.04-v1 \
             bash /workspace/.github/scripts/run-native-source-suite-in-container.sh
           status="$?"
@@ -240,8 +246,7 @@ jobs:
           name: pomelodb-src-${{ matrix.suite }}-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 7
-          path: |
-            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results
+          path: ${{ env.RESULTS_DIR }}
 
       - name: Summarize ${{ matrix.suite }} failures
         if: always()
@@ -250,7 +255,7 @@ jobs:
           SUITE: ${{ matrix.suite }}
         run: |
           set -u
-          results_dir="$RUNNER_TEMP/pomelodb-${SUITE}-results"
+          results_dir="$RESULTS_DIR"
           status_file="$results_dir/pomelodb-${SUITE}.status"
           log_file="$results_dir/pomelodb-${SUITE}.log"
           cluster_log="$results_dir/pomelodb-native-mpp/gpinitsystem.log"
