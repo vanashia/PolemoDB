@@ -137,8 +137,6 @@ jobs:
     needs: src-build
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 120
-    env:
-      RESULTS_DIR: ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-${{ github.run_id }}-${{ github.run_attempt }}-results
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -197,6 +195,8 @@ jobs:
           # Self-hosted runners retain RUNNER_TEMP between jobs.  Use a
           # run-unique directory so a failed gpinitsystem cannot make the
           # next attempt reject an already existing coordinator data dir.
+          RESULTS_DIR="$RUNNER_TEMP/pomelodb-${{ matrix.suite }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-results"
+          echo "RESULTS_DIR=$RESULTS_DIR" >> "$GITHUB_ENV"
           rm -rf "$RESULTS_DIR"
           mkdir -p "$RESULTS_DIR"
 
@@ -246,7 +246,7 @@ jobs:
           name: pomelodb-src-${{ matrix.suite }}-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 7
-          path: ${{ env.RESULTS_DIR }}
+          path: ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-${{ github.run_id }}-${{ github.run_attempt }}-results
 
       - name: Summarize ${{ matrix.suite }} failures
         if: always()
