@@ -229,7 +229,17 @@ install(DIRECTORY gpMgmt/bin/
   FILES_MATCHING PATTERN "*"
   PATTERN "gp_bash_version.sh.in" EXCLUDE
   PATTERN "__pycache__" EXCLUDE
-  PATTERN "ifaddrs" EXCLUDE)
+  PATTERN "ifaddrs" EXCLUDE
+  PATTERN "gppylib" EXCLUDE)
+install(DIRECTORY gpMgmt/bin/gppylib/
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/python/gppylib"
+  USE_SOURCE_PERMISSIONS
+  FILES_MATCHING
+  PATTERN "*.py"
+  PATTERN "*.json"
+  PATTERN "gpunit"
+  PATTERN "unit2"
+  PATTERN "__pycache__" EXCLUDE)
 install(DIRECTORY gpMgmt/sbin/
   DESTINATION "${CMAKE_INSTALL_SBINDIR}"
   USE_SOURCE_PERMISSIONS
@@ -258,9 +268,10 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   "#!/bin/sh\n"
   "GPHOME=\"${CMAKE_INSTALL_PREFIX}\"\n"
   "PATH=\"$GPHOME/bin:$GPHOME/sbin:$PATH\"\n"
+  "PYTHONPATH=\"$GPHOME/lib/python:$PYTHONPATH\"\n"
   "LD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$LD_LIBRARY_PATH\"\n"
   "DYLD_LIBRARY_PATH=\"$GPHOME/lib:$GPHOME/lib/postgresql:$DYLD_LIBRARY_PATH\"\n"
-  "export GPHOME PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH\n")
+  "export GPHOME PATH PYTHONPATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH\n")
 install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/greenplum_path.sh"
   DESTINATION ".")
 
