@@ -12,17 +12,20 @@ find_package(PkgConfig QUIET)
 
 if(GPDB_WITH_LLVM)
   find_program(GPDB_LLVM_CONFIG_EXECUTABLE
-    NAMES llvm-config llvm-config-19 llvm-config-18 llvm-config-17
-      llvm-config-16 llvm-config-15 llvm-config-14 llvm-config-13
-      llvm-config-12 llvm-config-11 llvm-config-10 llvm-config-9
-      llvm-config-8 llvm-config-7)
+    # The GPDB JIT sources in this tree are built and tested with LLVM 14.
+    # Prefer the versioned tool installed by the source-test dependency
+    # script; an unversioned llvm-config may point at a newer system LLVM
+    # whose C API no longer contains the headers used by these sources.
+    NAMES llvm-config-14 llvm-config-13 llvm-config-12 llvm-config-11
+      llvm-config-10 llvm-config-9 llvm-config-8 llvm-config-7
+      llvm-config)
   if(NOT GPDB_LLVM_CONFIG_EXECUTABLE)
     message(FATAL_ERROR
       "llvm-config is required when GPDB_WITH_LLVM=ON")
   endif()
   find_program(GPDB_LLVM_CLANG_EXECUTABLE
-    NAMES clang clang-19 clang-18 clang-17 clang-16 clang-15 clang-14
-      clang-13 clang-12 clang-11 clang-10 clang-9 clang-8 clang-7)
+    NAMES clang-14 clang-13 clang-12 clang-11 clang-10 clang-9 clang-8
+      clang-7 clang clang-19 clang-18 clang-17 clang-16 clang-15)
   if(NOT GPDB_LLVM_CLANG_EXECUTABLE)
     message(FATAL_ERROR "clang is required when GPDB_WITH_LLVM=ON")
   endif()
@@ -34,6 +37,17 @@ if(GPDB_WITH_LLVM)
     RESULT_VARIABLE _gpdb_llvm_version_status)
   if(_gpdb_llvm_version_status OR NOT GPDB_LLVM_VERSION MATCHES "^[0-9]+\\.")
     message(FATAL_ERROR "${GPDB_LLVM_CONFIG_EXECUTABLE} does not work")
+  endif()
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --includedir
+    OUTPUT_VARIABLE GPDB_LLVM_INCLUDEDIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  if(NOT EXISTS "${GPDB_LLVM_INCLUDEDIR}/llvm-c/Transforms/IPO.h")
+    message(FATAL_ERROR
+      "${GPDB_LLVM_CONFIG_EXECUTABLE} points to LLVM ${GPDB_LLVM_VERSION}, "
+      "but llvm-c/Transforms/IPO.h is missing; use the LLVM 14 development "
+      "package/toolchain for GPDB_WITH_LLVM")
   endif()
   execute_process(
     COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --cppflags

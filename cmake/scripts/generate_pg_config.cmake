@@ -30,7 +30,10 @@ define_value(PG_VERSION_NUM ${PG_VERSION_NUM_VALUE})
 define_value(PG_VERSION_STR
              "\"PostgreSQL ${PG_VERSION_VALUE} (Greenplum Database ${GP_VERSION})\"")
 define_value(PG_PRINTF_ATTRIBUTE printf)
-define_value(pg_restrict restrict)
+# `restrict` is valid C99 but is not a C++ keyword.  The LLVM provider is
+# compiled as C++, so use the compiler extension accepted by both Clang and
+# GCC for the generated headers consumed by C and C++ sources.
+define_value(pg_restrict __restrict)
 define_value(PG_KRB_SRVNAM "\"postgres\"")
 define_value(PACKAGE_NAME "\"PomeloDB\"")
 define_value(PACKAGE_VERSION "\"${GP_VERSION}\"")
