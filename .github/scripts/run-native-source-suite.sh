@@ -111,6 +111,22 @@ pg_regress() {
   local outputdir="$3"
   shift 3
   mkdir -p "$outputdir"
+  mkdir -p "$inputdir/results"
+  ln -sfn "$regress_module_path/regress.so" "$inputdir/regress.so"
+  mkdir -p \
+    "$outputdir/tablespace/testtablespace" \
+    "$outputdir/tablespace/testtablespace_otherloc" \
+    "$outputdir/tablespace/testtablespace_unlogged" \
+    "$outputdir/tablespace/testtablespace_existing_version_dir"/{1,2,3,4,5,6,7,8}/GPDB_99_399999991 \
+    "$outputdir/tablespace/testtablespace_1111111111222222222233333333334444444444555555555566666666667777777777888888888899999999990000000000" \
+    "$outputdir/tablespace/testtablespace_default_tablespace" \
+    "$outputdir/tablespace/testtablespace_temp_tablespace" \
+    "$outputdir/tablespace/testtablespace_mytempsp0" \
+    "$outputdir/tablespace/testtablespace_mytempsp1" \
+    "$outputdir/tablespace/testtablespace_mytempsp2" \
+    "$outputdir/tablespace/testtablespace_mytempsp3" \
+    "$outputdir/tablespace/testtablespace_mytempsp4" \
+    "$outputdir/tablespace/testtablespace_database_tablespace"
   run_command "$name" 45m \
     "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
     --inputdir="$inputdir" \
@@ -253,19 +269,23 @@ append_failure_diagnostics() {
       rm -f "$cluster_tail"
     fi
   fi
+
+  if [[ -d "$HOME/gpAdminLogs" ]]; then
+    {
+      echo
+      echo "===== gpAdminLogs diagnostics ====="
+      find "$HOME/gpAdminLogs" -type f -maxdepth 1 -print -exec tail -n 240 {} \;
+    } >> "$log_file"
+  fi
 }
 
 case "$SUITE" in
   regress)
     export PGOPTIONS='-c optimizer=off'
-    pg_regress parallel_schedule "$SOURCE_TEST_ROOT/regress" \
-      "$results_root/parallel" \
+    pg_regress regress "$SOURCE_TEST_ROOT/regress" \
+      "$results_root/regress" \
       --schedule="$SOURCE_TEST_ROOT/regress/parallel_schedule" \
-      --load-extension=gp_inject_fault
-    pg_regress greenplum_schedule "$SOURCE_TEST_ROOT/regress" \
-      "$results_root/greenplum" \
-      --schedule="$SOURCE_TEST_ROOT/regress/greenplum_schedule" \
-      --load-extension=gp_inject_fault
+      --schedule="$SOURCE_TEST_ROOT/regress/greenplum_schedule"
     ;;
   isolation)
     pg_isolation_regress isolation_schedule "$SOURCE_TEST_ROOT/isolation" \

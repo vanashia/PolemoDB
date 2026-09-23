@@ -3860,6 +3860,8 @@ SignalMppBackends(int sig)
 
 		if (MyProc == proc)
 			continue;
+		if (proc->isBackgroundWorker)
+			continue;
 
 		if (proc->mppSessionId > 0)
 		{

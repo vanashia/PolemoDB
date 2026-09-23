@@ -17,18 +17,7 @@ returns text as $$
     else:
         return 'Invalid command input'
 
-    try:
-        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
-    except subprocess.CalledProcessError as e:
-        # Incremental recovery can leave the mirror stopped before the
-        # explicit stop below.  Treat that idempotent stop as success, but
-        # preserve all other pg_ctl failures.
-        if command == 'stop' and (
-                b'no server running' in e.output or
-                (b'PID file' in e.output and b'does not exist' in e.output)):
-            return 'waiting for server to shut down done\nserver stopped\n'
-        raise
-    return output.decode().replace('.', '')
+    return subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).decode().replace('.', '')
 $$ language plpython3u;
 
 create or replace function wait_for_replication_error (expected_error text, segment_id int, retries int) returns bool as
