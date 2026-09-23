@@ -200,7 +200,19 @@ append_failure_diagnostics() {
 
   if [[ "$SUITE" == ldap ]]; then
     local ldap_config="$RUNNER_TEMP/pomelodb-ldap-tap/data/slapd.conf"
+    local ldap_listener=''
+    local ldap_log="$RUNNER_TEMP/pomelodb-ldap-tap/data/slapd.log"
     if [[ -f "$ldap_config" ]]; then
+      if [[ -d "$RUNNER_TEMP/pomelodb-ldap-tap/log" ]]; then
+        ldap_listener=$(rg -oh 'ldap://localhost:[0-9]+ ldaps://localhost:[0-9]+' \
+          "$RUNNER_TEMP/pomelodb-ldap-tap/log" -g 'regress_log_*' 2>/dev/null | tail -n 1 || true)
+      fi
+      if [[ -z "$ldap_listener" ]]; then
+        ldap_listener='ldap://127.0.0.1:57409 ldaps://127.0.0.1:57410'
+      else
+        ldap_listener=${ldap_listener/ldap:\/\/localhost:/ldap:\/\/127.0.0.1:}
+        ldap_listener=${ldap_listener/ldaps:\/\/localhost:/ldaps:\/\/127.0.0.1:}
+      fi
       {
         echo
         echo "===== LDAP slapd configuration diagnostics ====="
@@ -210,8 +222,13 @@ append_failure_diagnostics() {
           /usr/sbin/slapd -T test -f "$ldap_config" 2>&1 || true
         fi
         echo "===== LDAP slapd foreground diagnostics ====="
+        echo "listener: $ldap_listener"
         timeout --kill-after=5s 5s /usr/sbin/slapd \
-          -d 1 -f "$ldap_config" -h ldap://127.0.0.1:0 2>&1 || true
+          -d 1 -f "$ldap_config" -h "$ldap_listener" 2>&1 || true
+        if [[ -f "$ldap_log" ]]; then
+          echo "===== LDAP slapd logfile diagnostics ====="
+          tail -n 200 "$ldap_log"
+        fi
       } >> "$log_file"
     fi
   fi
@@ -291,12 +308,15 @@ case "$SUITE" in
     ;;
   fdw)
     fdw_outputdir="$results_root/fdw"
-    mkdir -p "$fdw_outputdir/results"
+    mkdir -p "$fdw_outputdir"
     ln -sfn "$POMELODB_INSTALL_PREFIX/bin/extended_protocol_commit_test" \
-      "$fdw_outputdir/results/extended_protocol_commit_test"
-    pg_regress fdw "$SOURCE_TEST_ROOT/fdw" "$fdw_outputdir" \
-      --load-extension=extended_protocol_commit_test_fdw \
-      extended_protocol_commit_test
+      "$fdw_outputdir/extended_protocol_commit_test"
+    (
+      cd "$fdw_outputdir"
+      pg_regress fdw "$SOURCE_TEST_ROOT/fdw" "$fdw_outputdir" \
+        --load-extension=extended_protocol_commit_test_fdw \
+        extended_protocol_commit_test
+    )
     run_command fdw-client 15m \
       "$POMELODB_INSTALL_PREFIX/bin/extended_protocol_commit_test"
     ;;
@@ -321,6 +341,17 @@ case "$SUITE" in
     run_in_directory ssl-cleanup 15m "$SOURCE_TEST_ROOT/ssl" ./clear_ssl.sh
     ;;
   modules)
+    # These PostgreSQL module tests assume a single postmaster. Running them
+    # in GPDB utility mode avoids dispatching test functions to segments and
+    # keeps catalog, planner and background-worker results deterministic.
+    export PGOPTIONS='-c gp_role=utility'
+    run_command modules-config 15m gpconfig \
+      -c shared_preload_libraries -v 'worker_spi,test_rls_hooks' --skipvalidation
+    run_command modules-config-worker 15m gpconfig \
+      -c worker_spi.database -v contrib_regression --skipvalidation
+    run_command modules-config-snapshot 15m gpconfig \
+      -c old_snapshot_threshold -v 0 --skipvalidation
+    run_command modules-restart 15m gpstop -r -a
     module_root="$SOURCE_TEST_ROOT/modules"
     for module_dir in "$module_root"/*; do
       [[ -d "$module_dir" ]] || continue
@@ -347,14 +378,8 @@ case "$SUITE" in
             # the module's scripts concurrently.
             module_regress_args+=("--max-concurrent-tests=1")
             ;;
-          test_rls_hooks)
-            module_regress_args+=("--temp-config=$module_dir/rls_hooks.conf")
-            ;;
           commit_ts)
             module_regress_args+=("--temp-config=$module_dir/commit_ts.conf")
-            ;;
-          worker_spi)
-            module_regress_args+=("--temp-config=$module_dir/dynamic.conf")
             ;;
         esac
         pg_regress "module-$module_name" "$module_dir" \
@@ -365,15 +390,9 @@ case "$SUITE" in
         for spec_file in "$module_dir"/specs/*.spec; do
           tests+=("$(basename "$spec_file" .spec)")
         done
-        module_isolation_args=()
-        case "$module_name" in
-          snapshot_too_old)
-            module_isolation_args+=("--temp-config=$module_dir/sto.conf")
-            ;;
-        esac
         pg_isolation_regress "module-$module_name-isolation" "$module_dir" \
           "$results_root/$module_name-isolation" \
-          "${module_isolation_args[@]}" "${tests[@]}"
+          "${tests[@]}"
       fi
       if compgen -G "$module_dir/t/*.pl" > /dev/null; then
         run_tap_suite "module-$module_name-tap" "$module_dir"
