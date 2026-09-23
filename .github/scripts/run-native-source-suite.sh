@@ -346,7 +346,7 @@ case "$SUITE" in
     # keeps catalog, planner and background-worker results deterministic.
     export PGOPTIONS='-c gp_role=utility'
     run_command modules-config 15m gpconfig \
-      -c shared_preload_libraries -v 'worker_spi,test_rls_hooks' --skipvalidation
+      -c shared_preload_libraries -v "'worker_spi,test_rls_hooks'" --skipvalidation
     run_command modules-config-worker 15m gpconfig \
       -c worker_spi.database -v contrib_regression --skipvalidation
     run_command modules-config-snapshot 15m gpconfig \
