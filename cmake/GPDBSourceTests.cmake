@@ -129,6 +129,47 @@ gpdb_add_source_test_module(gplibpq src/test/walrep/gplibpq.c)
 gpdb_add_source_test_module(heap_checksum_helper
   src/test/heap_checksum/heap_checksum_helper.c)
 
+# PL/Python is part of the native server installation, not just a configure
+# option.  Isolation and checksum tests create plpython3u functions at
+# runtime, so build the extension with the same CMake toolchain as the
+# backend.
+if(GPDB_WITH_PYTHON)
+  set(_gpdb_plpython_generated_dir "${CMAKE_BINARY_DIR}/plpython")
+  file(MAKE_DIRECTORY "${_gpdb_plpython_generated_dir}")
+  set(_gpdb_plpython_spiexceptions
+      "${_gpdb_plpython_generated_dir}/spiexceptions.h")
+  execute_process(
+    COMMAND "${PERL_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/src/pl/plpython/generate-spiexceptions.pl"
+            "${CMAKE_SOURCE_DIR}/src/backend/utils/errcodes.txt"
+    OUTPUT_FILE "${_gpdb_plpython_spiexceptions}"
+    RESULT_VARIABLE _gpdb_plpython_spiexceptions_status)
+  if(NOT _gpdb_plpython_spiexceptions_status EQUAL 0)
+    message(FATAL_ERROR "Could not generate PL/Python SPI exceptions header")
+  endif()
+
+  file(GLOB _gpdb_plpython_sources CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/pl/plpython/*.c")
+  add_library(plpython3 MODULE ${_gpdb_plpython_sources})
+  gpdb_apply_common_options(plpython3)
+  add_dependencies(plpython3 gpdb-generated)
+  target_compile_options(plpython3 PRIVATE -Wno-error)
+  target_include_directories(plpython3 PRIVATE
+    ${_gpdb_include_dirs}
+    "${CMAKE_SOURCE_DIR}/src/pl/plpython"
+    "${_gpdb_plpython_generated_dir}"
+    "${GPDB_GENERATED_BACKEND_DIR}"
+    ${Python3_INCLUDE_DIRS})
+  target_link_libraries(plpython3 PRIVATE Python3::Python)
+  set_target_properties(plpython3 PROPERTIES PREFIX "" OUTPUT_NAME plpython3)
+  gpdb_apply_module_link_options(plpython3)
+endif()
+
+# Logical decoding TAP tests load this output plugin by name.  It must be
+# installed into the production-style pkglibdir just like the legacy build.
+gpdb_add_source_test_module(test_decoding
+  "${CMAKE_SOURCE_DIR}/contrib/test_decoding/test_decoding.c")
+
 gpdb_add_source_test_executable(extended_protocol_commit_test
   src/test/fdw/extended_protocol_commit_test.c)
 target_link_libraries(extended_protocol_commit_test PRIVATE libpq)
@@ -198,11 +239,15 @@ set(_gpdb_source_test_targets
   test_parallel_retrieve_cursor_extended_query
   test_parallel_retrieve_cursor_extended_query_error
   fsync_helper gplibpq heap_checksum_helper
-  extended_protocol_commit_test extended_protocol_commit_test_fdw
+  extended_protocol_commit_test extended_protocol_commit_test_fdw test_decoding
   test-ctype
   test_parallel_retrieve_cursor_wait test_parallel_retrieve_cursor_nowait
   testlibpq testlibpq2 testlibpq3 testlibpq4 testlo testlo64
   ${_gpdb_source_module_targets})
+
+if(TARGET plpython3)
+  list(APPEND _gpdb_source_test_targets plpython3)
+endif()
 
 add_custom_target(gpdb-source-test-tools DEPENDS ${_gpdb_source_test_targets}
   gpdb-regression-tools)
@@ -221,6 +266,20 @@ install(TARGETS isolation2_regress_module fsync_helper gplibpq
   heap_checksum_helper extended_protocol_commit_test_fdw
   ${_gpdb_source_module_targets}
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+if(TARGET plpython3)
+  install(TARGETS plpython3
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+endif()
+install(TARGETS test_decoding
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+
+if(TARGET plpython3)
+  install(FILES
+    src/pl/plpython/plpython3u.control
+    src/pl/plpython/plpython3u--1.0.sql
+    src/pl/plpython/plpython3u--unpackaged--1.0.sql
+    DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+endif()
 
 install(FILES
   src/test/fdw/extension/extended_protocol_commit_test_fdw.control
@@ -251,7 +310,14 @@ foreach(_suite IN ITEMS
     authentication recovery kerberos ldap ssl modules perl)
   install(DIRECTORY "${CMAKE_SOURCE_DIR}/src/test/${_suite}/"
     DESTINATION "${GPDB_INSTALL_DATADIR}/source-tests/${_suite}"
+    USE_SOURCE_PERMISSIONS
     PATTERN "tmp_check" EXCLUDE
     PATTERN "output_iso" EXCLUDE
     PATTERN "results" EXCLUDE)
 endforeach()
+
+# fdw/extended_protocol_commit_test invokes the client executable with a
+# relative path from the regression output directory.  Keep a copy in the
+# installed suite in addition to the normal bin/ location.
+install(PROGRAMS "$<TARGET_FILE:extended_protocol_commit_test>"
+  DESTINATION "${GPDB_INSTALL_DATADIR}/source-tests/fdw")

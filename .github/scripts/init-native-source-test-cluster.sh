@@ -41,7 +41,8 @@ mkdir -p \
   "$cluster_root/segment2" \
   "$cluster_root/mirror0" \
   "$cluster_root/mirror1" \
-  "$cluster_root/mirror2"
+  "$cluster_root/mirror2" \
+  "$cluster_root/coordinator-mirror"
 
 cat > "$RUNNER_TEMP/native-hostfile" <<EOF
 $coordinator_host
@@ -64,6 +65,9 @@ declare -a MIRROR_DATA_DIRECTORY=(
 COORDINATOR_HOSTNAME=$coordinator_host
 COORDINATOR_DIRECTORY=$cluster_root/coordinator
 COORDINATOR_PORT=15432
+STANDBY_HOSTNAME=$coordinator_host
+STANDBY_PORT=15433
+STANDBY_DATADIR=$cluster_root/coordinator-mirror
 ENCODING=UNICODE
 TRUSTED_SHELL=ssh
 EOF
@@ -117,6 +121,7 @@ if [[ -n "${GITHUB_ENV:-}" ]]; then
     echo "PGPORT=$PGPORT"
     echo "PGDATABASE=$PGDATABASE"
     echo "PATH=$POMELODB_INSTALL_PREFIX/bin:$PATH"
+    echo "PYTHONPATH=$POMELODB_INSTALL_PREFIX/lib/python:${PYTHONPATH:-}"
     echo "LD_LIBRARY_PATH=$POMELODB_INSTALL_PREFIX/lib:$POMELODB_INSTALL_PREFIX/lib/postgresql:${LD_LIBRARY_PATH:-}"
   } >> "$GITHUB_ENV"
 fi

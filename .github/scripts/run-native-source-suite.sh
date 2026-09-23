@@ -15,6 +15,8 @@ export PGDATABASE="${PGDATABASE:-postgres}"
 export GPHOME="$POMELODB_INSTALL_PREFIX"
 export COORDINATOR_DATA_DIRECTORY="${COORDINATOR_DATA_DIRECTORY:?COORDINATOR_DATA_DIRECTORY is required}"
 export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
+source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
+export PYTHONPATH="$POMELODB_INSTALL_PREFIX/lib/python:${PYTHONPATH:-}"
 
 # CMake installs the complete source-test tree, but the repository contains
 # this link so isolation2 can reuse regress data.  Recreate it inside the
@@ -115,6 +117,7 @@ pg_regress() {
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
     --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
     --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
+    --load-extension=gp_inject_fault \
     --max-concurrent-tests=20 "$@"
 }
 
@@ -140,6 +143,7 @@ pg_isolation_regress() {
     --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
     --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
     --load-extension=pageinspect \
+    --load-extension=gp_inject_fault \
     --max-concurrent-tests=10 "$@"
 }
 
@@ -155,7 +159,7 @@ run_tap_suite() {
     PG_REGRESS="$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
     top_builddir="$POMELODB_INSTALL_PREFIX" \
     PGPORT="$PGPORT" \
-    with_gssapi=yes with_ldap=yes with_openssl=yes \
+    with_gssapi=yes with_krb_srvnam=postgres with_ldap=yes with_openssl=yes \
     prove -v -I "$SOURCE_TEST_ROOT/perl" -I "$directory" "${tap_files[@]}"
 }
 
@@ -211,6 +215,8 @@ case "$SUITE" in
       setup heap_checksum_corruption
     ;;
   fdw)
+    ln -sfn "$POMELODB_INSTALL_PREFIX/bin/extended_protocol_commit_test" \
+      "$SOURCE_TEST_ROOT/fdw/extended_protocol_commit_test"
     pg_regress fdw "$SOURCE_TEST_ROOT/fdw" "$results_root/fdw" \
       --load-extension=extended_protocol_commit_test_fdw \
       extended_protocol_commit_test
@@ -234,7 +240,7 @@ case "$SUITE" in
     pg_regress ssl-regression "$SOURCE_TEST_ROOT/ssl" "$results_root/ssl" \
       --init-file="$SOURCE_TEST_ROOT/ssl/init_file_ssl_connection" \
       --dbname=test_sslconnection --schedule="$SOURCE_TEST_ROOT/ssl/ssl_connection_schedule" \
-      --user=ssltestuser --host="$(hostname -s)"
+      --user=ssltestuser --host=127.0.0.1
     run_in_directory ssl-cleanup 15m "$SOURCE_TEST_ROOT/ssl" ./clear_ssl.sh
     ;;
   modules)
