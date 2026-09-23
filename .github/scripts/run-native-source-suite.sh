@@ -109,31 +109,35 @@ pg_regress() {
   local name="$1"
   local inputdir="$2"
   local outputdir="$3"
+  local tablespace_root="$RUNNER_TEMP/${SUITE}-${name}-tablespace"
   shift 3
   mkdir -p "$outputdir"
   mkdir -p "$inputdir/results"
   ln -sfn "$regress_module_path/regress.so" "$inputdir/regress.so"
+  ln -sfn "$regress_module_path/regress.so" "$outputdir/regress.so"
+  ln -sfn "$inputdir/data" "$outputdir/data"
+  ln -sfn "$inputdir/test_dbconn.py" "$outputdir/test_dbconn.py"
   mkdir -p \
-    "$outputdir/tablespace/testtablespace" \
-    "$outputdir/tablespace/testtablespace_otherloc" \
-    "$outputdir/tablespace/testtablespace_unlogged" \
-    "$outputdir/tablespace/testtablespace_existing_version_dir"/{1,2,3,4,5,6,7,8}/GPDB_99_399999991 \
-    "$outputdir/tablespace/testtablespace_1111111111222222222233333333334444444444555555555566666666667777777777888888888899999999990000000000" \
-    "$outputdir/tablespace/testtablespace_default_tablespace" \
-    "$outputdir/tablespace/testtablespace_temp_tablespace" \
-    "$outputdir/tablespace/testtablespace_mytempsp0" \
-    "$outputdir/tablespace/testtablespace_mytempsp1" \
-    "$outputdir/tablespace/testtablespace_mytempsp2" \
-    "$outputdir/tablespace/testtablespace_mytempsp3" \
-    "$outputdir/tablespace/testtablespace_mytempsp4" \
-    "$outputdir/tablespace/testtablespace_database_tablespace"
+    "$tablespace_root/testtablespace" \
+    "$tablespace_root/testtablespace_otherloc" \
+    "$tablespace_root/testtablespace_unlogged" \
+    "$tablespace_root/testtablespace_existing_version_dir"/{1,2,3,4,5,6,7,8}/GPDB_99_399999991 \
+    "$tablespace_root/testtablespace_1111111111222222222233333333334444444444555555555566666666667777777777888888888899999999990000000000" \
+    "$tablespace_root/testtablespace_default_tablespace" \
+    "$tablespace_root/testtablespace_temp_tablespace" \
+    "$tablespace_root/testtablespace_mytempsp0" \
+    "$tablespace_root/testtablespace_mytempsp1" \
+    "$tablespace_root/testtablespace_mytempsp2" \
+    "$tablespace_root/testtablespace_mytempsp3" \
+    "$tablespace_root/testtablespace_mytempsp4" \
+    "$tablespace_root/testtablespace_database_tablespace"
   run_command "$name" 45m \
     "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
     --inputdir="$inputdir" \
     --outputdir="$outputdir" \
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
     --dlpath="$regress_module_path" \
-    --tablespace-dir="$outputdir/tablespace" \
+    --tablespace-dir="$tablespace_root" \
     --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
     --load-extension=gp_inject_fault \
     --max-concurrent-tests=20 "$@"

@@ -36,6 +36,7 @@ set_target_properties(gpdb-ifaddrs PROPERTIES OUTPUT_NAME ifaddrs)
 
 add_custom_target(gpdb ALL DEPENDS gpdb-server gpdb-clients)
 add_dependencies(gpdb gpdb-ifaddrs)
+add_dependencies(gpdb gpdb-guc-metadata)
 add_dependencies(gpdb-source-test-tools gpdb)
 if(TARGET gpfdist)
   add_dependencies(gpdb gpfdist)
@@ -120,10 +121,11 @@ install(FILES
   src/backend/catalog/system_views_gp_summary.sql
   src/backend/catalog/information_schema.sql
   src/backend/catalog/sql_features.txt
-  src/backend/catalog/cdb_schema.sql
   "${GPDB_GENERATED_SYSTEM_VIEWS_GP}"
   "${GPDB_GENERATED_SNOWBALL_CREATE}"
   DESTINATION "${GPDB_INSTALL_DATADIR}")
+install(FILES src/backend/catalog/cdb_schema.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
 install(FILES gpcontrib/gp_toolkit/sql/gp_toolkit.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
 if(GPDB_WITH_ZSTD)
@@ -215,7 +217,8 @@ install(DIRECTORY src/test/regress/
   PATTERN "*.source"
   PATTERN "*_schedule"
   PATTERN "resultmap"
-  PATTERN "init_file")
+  PATTERN "init_file"
+  PATTERN "test_dbconn.py")
 install(DIRECTORY "${GPDB_REGRESS_BUILD_DIR}/"
   DESTINATION "${GPDB_INSTALL_DATADIR}/regress"
   USE_SOURCE_PERMISSIONS
@@ -254,12 +257,19 @@ install(DIRECTORY gpMgmt/bin/gppylib/
   PATTERN "gpunit"
   PATTERN "unit2"
   PATTERN "__pycache__" EXCLUDE)
-install(DIRECTORY gpMgmt/sbin/
-  DESTINATION "${CMAKE_INSTALL_SBINDIR}"
-  USE_SOURCE_PERMISSIONS
-  FILES_MATCHING PATTERN "*"
-  PATTERN "__pycache__" EXCLUDE
-  PATTERN "*.pyc" EXCLUDE)
+install(PROGRAMS
+  gpMgmt/sbin/gpconfig_helper.py
+  gpMgmt/sbin/gpoperation.py
+  gpMgmt/sbin/gpsegstop.py
+  gpMgmt/sbin/gpcleansegmentdir.py
+  gpMgmt/sbin/gpgetstatususingtransition.py
+  gpMgmt/sbin/gpsegstart.py
+  gpMgmt/sbin/seg_update_pg_hba.py
+  gpMgmt/sbin/gpsegrecovery.py
+  gpMgmt/sbin/gpsegsetuprecovery.py
+  gpMgmt/sbin/recovery_base.py
+  gpMgmt/sbin/packcore
+  DESTINATION "${CMAKE_INSTALL_SBINDIR}")
 configure_file(
   "${CMAKE_SOURCE_DIR}/gpMgmt/bin/lib/gp_bash_version.sh.in"
   "${CMAKE_CURRENT_BINARY_DIR}/gp_bash_version.sh"

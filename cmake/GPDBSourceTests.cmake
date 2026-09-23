@@ -279,6 +279,30 @@ endif()
 install(TARGETS test_decoding
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 
+# gpconfig reads this metadata at runtime.  The legacy install invokes the
+# parser as part of gpMgmt/bin installation; generate the same file for the
+# native install artifact.
+if(NOT Python3_EXECUTABLE)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+endif()
+set(_gpdb_guc_metadata_file
+  "${GPDB_GENERATED_DIR}/share/greenplum/gucs_disallowed_in_file.txt")
+add_custom_command(
+  OUTPUT "${_gpdb_guc_metadata_file}"
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          "${GPDB_GENERATED_DIR}/share/greenplum"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_SOURCE_DIR}/gpMgmt/bin/gpconfig_modules/parse_guc_metadata.py"
+          "${GPDB_GENERATED_DIR}"
+  DEPENDS "${CMAKE_SOURCE_DIR}/gpMgmt/bin/gpconfig_modules/parse_guc_metadata.py"
+          "${CMAKE_SOURCE_DIR}/src/backend/utils/misc/guc.c"
+          "${CMAKE_SOURCE_DIR}/src/backend/utils/misc/guc_gp.c"
+  VERBATIM)
+add_custom_target(gpdb-guc-metadata DEPENDS "${_gpdb_guc_metadata_file}")
+add_dependencies(gpdb-source-test-tools gpdb-guc-metadata)
+install(FILES "${_gpdb_guc_metadata_file}"
+  DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/greenplum")
+
 if(TARGET plpython3)
   install(FILES
     src/pl/plpython/plpython3u.control
