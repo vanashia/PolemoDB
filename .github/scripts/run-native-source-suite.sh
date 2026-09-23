@@ -17,6 +17,7 @@ export COORDINATOR_DATA_DIRECTORY="${COORDINATOR_DATA_DIRECTORY:?COORDINATOR_DAT
 export MASTER_DATA_DIRECTORY="$COORDINATOR_DATA_DIRECTORY"
 source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
 export PYTHONPATH="$POMELODB_INSTALL_PREFIX/lib/python:${PYTHONPATH:-}"
+regress_module_path="$POMELODB_INSTALL_PREFIX/share/postgresql/regress"
 
 # CMake installs the complete source-test tree, but the repository contains
 # this link so isolation2 can reuse regress data.  Recreate it inside the
@@ -115,7 +116,7 @@ pg_regress() {
     --inputdir="$inputdir" \
     --outputdir="$outputdir" \
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-    --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
+    --dlpath="$regress_module_path" \
     --tablespace-dir="$outputdir/tablespace" \
     --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
     --load-extension=gp_inject_fault \
@@ -141,7 +142,7 @@ pg_isolation_regress() {
     --inputdir="$inputdir" \
     --outputdir="$outputdir" \
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-    --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
+    --dlpath="$regress_module_path" \
     --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
     --load-extension=pageinspect \
     --load-extension=gp_inject_fault \
@@ -242,7 +243,7 @@ case "$SUITE" in
       --inputdir="$SOURCE_TEST_ROOT/isolation2" \
       --outputdir="$results_root/isolation2" \
       --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-      --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
+      --dlpath="$regress_module_path" \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       --init-file="$SOURCE_TEST_ROOT/isolation2/init_file_isolation2" \
       --load-extension=gp_inject_fault \
@@ -363,7 +364,7 @@ case "$SUITE" in
       --inputdir="$SOURCE_TEST_ROOT/isolation2" \
       --outputdir="$results_root" \
       --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-      --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
+      --dlpath="$regress_module_path" \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       --init-file="$SOURCE_TEST_ROOT/isolation2/init_file_isolation2" \
       --schedule="$schedule_file" --load-extension=gp_inject_fault \
