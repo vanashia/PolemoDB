@@ -28,3 +28,4 @@ fi
 sudo localedef -i de_DE -f ISO-8859-1 de_DE.ISO8859-1 || true
 sudo localedef -i el_GR -f ISO-8859-7 gr_GR.ISO8859-7 || true
 sudo localedef -i ru_RU -f KOI8-R ru_RU.KOI8-R || true
+sudo localedef -i en_US -f UTF-8 en_US.UTF-8 || true

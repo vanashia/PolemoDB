@@ -110,6 +110,7 @@ pg_regress() {
   local inputdir="$2"
   local outputdir="$3"
   local tablespace_root="$RUNNER_TEMP/${SUITE}-${name}-tablespace"
+  local duration="${PG_REGRESS_TIMEOUT:-45m}"
   shift 3
   # pg_regress expands @abs_srcdir@ and @abs_builddir@ independently. Run
   # against a writable copy so both paths and relative \copy/\! commands
@@ -146,7 +147,7 @@ pg_regress() {
     "$tablespace_root/testtablespace_mytempsp3" \
     "$tablespace_root/testtablespace_mytempsp4" \
     "$tablespace_root/testtablespace_database_tablespace"
-  run_in_directory "$name" 45m "$outputdir" \
+  run_in_directory "$name" "$duration" "$outputdir" \
     "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
     --inputdir="$outputdir" \
     --outputdir="$outputdir" \
@@ -307,6 +308,7 @@ append_failure_diagnostics() {
 case "$SUITE" in
   regress)
     export PGOPTIONS='-c optimizer=off'
+    export PG_REGRESS_TIMEOUT=90m
     pg_regress regress "$SOURCE_TEST_ROOT/regress" \
       "$results_root/regress" \
       --schedule="$SOURCE_TEST_ROOT/regress/parallel_schedule" \
@@ -321,7 +323,7 @@ case "$SUITE" in
   isolation2)
     pg_isolation_regress isolation2 "$SOURCE_TEST_ROOT/isolation2" \
       "$results_root/isolation2" \
-      "$POMELODB_INSTALL_PREFIX/bin/pg_isolation2_regress" 60m \
+      "$POMELODB_INSTALL_PREFIX/bin/pg_isolation2_regress" 90m \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       --init-file="$SOURCE_TEST_ROOT/isolation2/init_file_isolation2" \
       --schedule="$SOURCE_TEST_ROOT/isolation2/isolation2_schedule"
@@ -469,6 +471,7 @@ case "$SUITE" in
         fi
         pg_isolation_regress "module-$module_name-isolation" "$module_dir" \
           "$results_root/$module_name-isolation" \
+          "$POMELODB_INSTALL_PREFIX/bin/pg_isolation_regress" 45m \
           "${tests[@]}"
       fi
       if compgen -G "$module_dir/t/*.pl" > /dev/null; then

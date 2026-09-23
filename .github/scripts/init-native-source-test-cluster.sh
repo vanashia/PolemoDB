@@ -31,7 +31,10 @@ grep -qxF "$(cat "$HOME/.ssh/id_ed25519.pub")" \
 chmod 600 "$HOME/.ssh/authorized_keys"
 ssh-keyscan -H "$(hostname -s)" localhost >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 
-coordinator_host="$(hostname -s)"
+# All database instances run in one CI container.  Use a stable loopback
+# hostname in the catalog so external-table tests can reach gpfdist without
+# depending on the container hostname being resolvable from every backend.
+coordinator_host=localhost
 ssh-keyscan -H "$coordinator_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 cluster_root="$RUNNER_TEMP/pomelodb-native-mpp"
 mkdir -p \
