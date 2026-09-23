@@ -87,7 +87,7 @@ jobs:
           for module in citext.so gpextprotocol.so; do
             test -r "$install_root/lib/postgresql/$module"
           done
-          test "$(rg -c '^#define USE_CURL 1' build-src-tests/generated/src/include/pg_config.h)" -eq 1
+          test "$(grep -c '^#define USE_CURL 1' build-src-tests/generated/src/include/pg_config.h)" -eq 1
           for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
             test -d "$source_root/$suite"
           done

@@ -229,7 +229,7 @@ append_failure_diagnostics() {
     local ldap_log="$RUNNER_TEMP/pomelodb-ldap-tap/data/slapd.log"
     if [[ -f "$ldap_config" ]]; then
       if [[ -d "$RUNNER_TEMP/pomelodb-ldap-tap/log" ]]; then
-        ldap_listener=$(rg -oh 'ldap://localhost:[0-9]+ ldaps://localhost:[0-9]+' \
+        ldap_listener=$(grep -Eoh 'ldap://localhost:[0-9]+ ldaps://localhost:[0-9]+' \
           "$RUNNER_TEMP/pomelodb-ldap-tap/log" -g 'regress_log_*' 2>/dev/null | tail -n 1 || true)
       fi
       if [[ -z "$ldap_listener" ]]; then
