@@ -116,6 +116,7 @@ pg_regress() {
     --outputdir="$outputdir" \
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
     --dlpath="$POMELODB_INSTALL_PREFIX/lib/postgresql" \
+    --tablespace-dir="$outputdir/tablespace" \
     --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
     --load-extension=gp_inject_fault \
     --max-concurrent-tests=20 "$@"
@@ -162,6 +163,60 @@ run_tap_suite() {
     PGPORT="$PGPORT" \
     with_gssapi=yes with_krb_srvnam=postgres with_ldap=yes with_openssl=yes \
     prove -v -I "$SOURCE_TEST_ROOT/perl" -I "$directory" "${tap_files[@]}"
+}
+
+append_failure_diagnostics() {
+  local diagnostic_file
+  local diagnostic_count=0
+
+  while IFS= read -r -d '' diagnostic_file; do
+    [[ -s "$diagnostic_file" ]] || continue
+    {
+      echo
+      echo "===== diagnostic: $diagnostic_file ====="
+      sed -n '1,400p' "$diagnostic_file"
+    } >> "$log_file"
+  done < <(
+    find "$results_root" -type f \
+      \( -name regression.diffs -o -name regression.out \) \
+      -print0 2>/dev/null
+  )
+
+  if [[ -n "${RUNNER_TEMP:-}" && -d "$RUNNER_TEMP/pomelodb-${SUITE}-tap/log" ]]; then
+    while IFS= read -r -d '' diagnostic_file; do
+      [[ -s "$diagnostic_file" ]] || continue
+      {
+        echo
+        echo "===== TAP diagnostic: $diagnostic_file ====="
+        tail -n 300 "$diagnostic_file"
+      } >> "$log_file"
+    done < <(
+      find "$RUNNER_TEMP/pomelodb-${SUITE}-tap/log" -type f \
+        \( -name '*.log' -o -name 'regress_log_*' \) \
+        -print0 2>/dev/null
+    )
+  fi
+
+  if [[ -n "${POMELODB_CLUSTER_ROOT:-}" && -d "$POMELODB_CLUSTER_ROOT" ]]; then
+    local cluster_tail="$results_root/cluster-log-tail.log"
+    : > "$cluster_tail"
+    while IFS= read -r -d '' diagnostic_file; do
+      {
+        echo
+        echo "===== cluster log: $diagnostic_file ====="
+        tail -n 160 "$diagnostic_file"
+      } >> "$cluster_tail"
+      diagnostic_count=$((diagnostic_count + 1))
+      [[ "$diagnostic_count" -lt 80 ]] || break
+    done < <(
+      find "$POMELODB_CLUSTER_ROOT" -type f \
+        \( -name '*.log' -o -path '*/pg_log/*' \) \
+        -print0 2>/dev/null
+    )
+    if [[ ! -s "$cluster_tail" ]]; then
+      rm -f "$cluster_tail"
+    fi
+  fi
 }
 
 case "$SUITE" in
@@ -243,7 +298,7 @@ case "$SUITE" in
     pg_regress ssl-regression "$SOURCE_TEST_ROOT/ssl" "$results_root/ssl" \
       --init-file="$SOURCE_TEST_ROOT/ssl/init_file_ssl_connection" \
       --dbname=test_sslconnection --schedule="$SOURCE_TEST_ROOT/ssl/ssl_connection_schedule" \
-      --user=ssltestuser --host=127.0.0.1 --sslmode=verify-full
+      --user=ssltestuser --host="$(hostname)" --sslmode=verify-full
     run_in_directory ssl-cleanup 15m "$SOURCE_TEST_ROOT/ssl" ./clear_ssl.sh
     ;;
   modules)
@@ -319,6 +374,8 @@ case "$SUITE" in
     record_status invalid-suite 2
     ;;
   esac
+
+append_failure_diagnostics
 
 printf 'suite_status=%s\n' "$suite_status" >> "$status_file"
 exit "$suite_status"

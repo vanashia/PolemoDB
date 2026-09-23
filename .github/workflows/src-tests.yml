@@ -178,9 +178,11 @@ jobs:
           path: |
             ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.log
             ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.status
-            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results
-            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-tap
-            ${{ runner.temp }}/pomelodb-native-mpp
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results/**/regression.diffs
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results/**/regression.out
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results/**/*.log
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-tap/log/**
+            ${{ runner.temp }}/pomelodb-native-mpp/gpinitsystem.log
 
       - name: Summarize ${{ matrix.suite }} failures
         if: always()
