@@ -179,6 +179,7 @@ jobs:
             ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.log
             ${{ runner.temp }}/pomelodb-${{ matrix.suite }}.status
             ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-results
+            ${{ runner.temp }}/pomelodb-${{ matrix.suite }}-tap
             ${{ runner.temp }}/pomelodb-native-mpp
 
       - name: Summarize ${{ matrix.suite }} failures

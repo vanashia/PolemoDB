@@ -41,8 +41,7 @@ mkdir -p \
   "$cluster_root/segment2" \
   "$cluster_root/mirror0" \
   "$cluster_root/mirror1" \
-  "$cluster_root/mirror2" \
-  "$cluster_root/coordinator-mirror"
+  "$cluster_root/mirror2"
 
 cat > "$RUNNER_TEMP/native-hostfile" <<EOF
 $coordinator_host

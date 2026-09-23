@@ -47,6 +47,7 @@ add_dependencies(gpdb gp_toolkit)
 add_dependencies(gpdb gp_ao_co_diagnostics gp_workfile_mgr
   gp_session_state_memory_stats gp_instrument_shmem)
 add_dependencies(gpdb pageinspect gp_inject_fault gp_debug_numsegments)
+add_dependencies(gpdb ${GPDB_CONVERSION_TARGETS} ${GPDB_SOURCE_EXTENSION_TARGETS})
 if(TARGET gp_zstd_compression)
   add_dependencies(gpdb gp_zstd_compression)
 endif()
@@ -70,6 +71,8 @@ install(TARGETS gp_toolkit LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgres
 install(TARGETS gp_ao_co_diagnostics gp_workfile_mgr gp_session_state_memory_stats
   gp_instrument_shmem LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 install(TARGETS pageinspect gp_inject_fault gp_debug_numsegments
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
+install(TARGETS ${GPDB_CONVERSION_TARGETS} ${GPDB_SOURCE_EXTENSION_TARGETS}
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/postgresql")
 if(TARGET gp_zstd_compression)
   install(TARGETS gp_zstd_compression
@@ -185,6 +188,15 @@ install(FILES
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments.control
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments--1.0.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+foreach(_source_extension IN ITEMS btree_gin pg_stat_statements sslinfo)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control")
+    file(GLOB _source_extension_files
+      "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control"
+      "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}--*.sql")
+    install(FILES ${_source_extension_files}
+      DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+  endif()
+endforeach()
 
 install(FILES
   src/backend/utils/misc/postgresql.conf.sample

@@ -219,6 +219,12 @@ gpdb_add_source_module_target(test_planner
   src/test/modules/test_planner/integration_tests/planner_integration_tests.c)
 target_include_directories(source_module_test_planner PRIVATE
   "${CMAKE_SOURCE_DIR}/src/test/modules/test_planner")
+# The legacy make build emits source paths relative to the module directory in
+# __FILE__.  CMake/Ninja emits paths relative to the build directory instead;
+# normalize both forms so planner expected output stays build-system neutral.
+target_compile_options(source_module_test_planner PRIVATE
+  "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/src/test/modules/test_planner/="
+  "-fmacro-prefix-map=../src/test/modules/test_planner/=")
 gpdb_add_source_module_target(test_predtest
   src/test/modules/test_predtest/test_predtest.c)
 gpdb_add_source_module_target(test_rbtree

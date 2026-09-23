@@ -157,6 +157,7 @@ run_tap_suite() {
     TESTLOGDIR="$RUNNER_TEMP/pomelodb-${SUITE}-tap/log" \
     TESTDATADIR="$RUNNER_TEMP/pomelodb-${SUITE}-tap/data" \
     PG_REGRESS="$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
+    REGRESS_SHLIB="$POMELODB_INSTALL_PREFIX/lib/postgresql/regress.so" \
     top_builddir="$POMELODB_INSTALL_PREFIX" \
     PGPORT="$PGPORT" \
     with_gssapi=yes with_krb_srvnam=postgres with_ldap=yes with_openssl=yes \
@@ -215,9 +216,11 @@ case "$SUITE" in
       setup heap_checksum_corruption
     ;;
   fdw)
+    fdw_outputdir="$results_root/fdw"
+    mkdir -p "$fdw_outputdir"
     ln -sfn "$POMELODB_INSTALL_PREFIX/bin/extended_protocol_commit_test" \
-      "$SOURCE_TEST_ROOT/fdw/extended_protocol_commit_test"
-    pg_regress fdw "$SOURCE_TEST_ROOT/fdw" "$results_root/fdw" \
+      "$fdw_outputdir/extended_protocol_commit_test"
+    pg_regress fdw "$SOURCE_TEST_ROOT/fdw" "$fdw_outputdir" \
       --load-extension=extended_protocol_commit_test_fdw \
       extended_protocol_commit_test
     run_command fdw-client 15m \
@@ -240,7 +243,7 @@ case "$SUITE" in
     pg_regress ssl-regression "$SOURCE_TEST_ROOT/ssl" "$results_root/ssl" \
       --init-file="$SOURCE_TEST_ROOT/ssl/init_file_ssl_connection" \
       --dbname=test_sslconnection --schedule="$SOURCE_TEST_ROOT/ssl/ssl_connection_schedule" \
-      --user=ssltestuser --host=127.0.0.1
+      --user=ssltestuser --host=127.0.0.1 --sslmode=verify-full
     run_in_directory ssl-cleanup 15m "$SOURCE_TEST_ROOT/ssl" ./clear_ssl.sh
     ;;
   modules)
@@ -253,16 +256,44 @@ case "$SUITE" in
         for sql_file in "$module_dir"/sql/*.sql; do
           tests+=("$(basename "$sql_file" .sql)")
         done
+        # pgxs.mk adds --dbname=$(CONTRIB_TESTDB) for every module's
+        # regression tests.  Keep the native runner on the same database;
+        # several modules create extension objects there and their expected
+        # dumps depend on that database name.
+        module_regress_args=("--dbname=contrib_regression")
+        case "$module_name" in
+          test_extensions)
+            # test_extdepend is intentionally excluded by the module's
+            # Makefile until GPDB issue 14532 is resolved.
+            tests=(test_extensions)
+            ;;
+          test_rls_hooks)
+            module_regress_args+=("--temp-config=$module_dir/rls_hooks.conf")
+            ;;
+          commit_ts)
+            module_regress_args+=("--temp-config=$module_dir/commit_ts.conf")
+            ;;
+          worker_spi)
+            module_regress_args+=("--temp-config=$module_dir/dynamic.conf")
+            ;;
+        esac
         pg_regress "module-$module_name" "$module_dir" \
-          "$results_root/$module_name" "${tests[@]}"
+          "$results_root/$module_name" "${module_regress_args[@]}" "${tests[@]}"
       fi
       if compgen -G "$module_dir/specs/*.spec" > /dev/null; then
         tests=()
         for spec_file in "$module_dir"/specs/*.spec; do
           tests+=("$(basename "$spec_file" .spec)")
         done
+        module_isolation_args=()
+        case "$module_name" in
+          snapshot_too_old)
+            module_isolation_args+=("--temp-config=$module_dir/sto.conf")
+            ;;
+        esac
         pg_isolation_regress "module-$module_name-isolation" "$module_dir" \
-          "$results_root/$module_name-isolation" "${tests[@]}"
+          "$results_root/$module_name-isolation" \
+          "${module_isolation_args[@]}" "${tests[@]}"
       fi
       if compgen -G "$module_dir/t/*.pl" > /dev/null; then
         run_tap_suite "module-$module_name-tap" "$module_dir"

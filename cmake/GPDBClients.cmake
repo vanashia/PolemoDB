@@ -76,6 +76,38 @@ target_link_libraries(gp_exttable_fdw PRIVATE libpq gpdb-platform)
 set_target_properties(gp_exttable_fdw PROPERTIES PREFIX "" SUFFIX ".so")
 gpdb_apply_module_link_options(gp_exttable_fdw)
 
+# Encoding conversion procedures are loadable backend modules.  The legacy
+# build recurses through every directory under conversion_procs; keep the
+# same complete set in the native installation so locale and DDL tests can
+# resolve the built-in conversion functions from $libdir.
+set(GPDB_CONVERSION_TARGETS)
+set(_gpdb_conversion_modules
+  ascii_and_mic cyrillic_and_mic euc_cn_and_mic euc_jp_and_sjis
+  euc_kr_and_mic euc_tw_and_big5 latin2_and_win1250 latin_and_mic
+  utf8_and_ascii utf8_and_big5 utf8_and_cyrillic utf8_and_euc_cn
+  utf8_and_euc_jp utf8_and_euc_kr utf8_and_euc_tw utf8_and_gb18030
+  utf8_and_gbk utf8_and_iso8859 utf8_and_iso8859_1 utf8_and_johab
+  utf8_and_sjis utf8_and_win utf8_and_uhc utf8_and_euc2004
+  utf8_and_sjis2004 euc2004_sjis2004)
+foreach(_conversion_module IN LISTS _gpdb_conversion_modules)
+  set(_conversion_sources
+    "${CMAKE_SOURCE_DIR}/src/backend/utils/mb/conversion_procs/${_conversion_module}/${_conversion_module}.c")
+  if(_conversion_module STREQUAL "euc_tw_and_big5")
+    list(APPEND _conversion_sources
+      "${CMAKE_SOURCE_DIR}/src/backend/utils/mb/conversion_procs/euc_tw_and_big5/big5.c")
+  endif()
+  add_library(${_conversion_module} MODULE
+    ${_conversion_sources})
+  gpdb_apply_common_options(${_conversion_module})
+  add_dependencies(${_conversion_module} gpdb-generated)
+  target_include_directories(${_conversion_module} PRIVATE
+    ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend")
+  target_link_libraries(${_conversion_module} PRIVATE gpdb-platform)
+  set_target_properties(${_conversion_module} PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(${_conversion_module})
+  list(APPEND GPDB_CONVERSION_TARGETS ${_conversion_module})
+endforeach()
+
 if(GPDB_WITH_ZSTD)
   add_library(gp_zstd_compression MODULE gpcontrib/zstd/zstd_compression.c)
   gpdb_apply_common_options(gp_zstd_compression)
@@ -135,6 +167,34 @@ target_include_directories(pageinspect PRIVATE ${_gpdb_include_dirs}
 target_link_libraries(pageinspect PRIVATE gpdb-platform)
 set_target_properties(pageinspect PROPERTIES PREFIX "" SUFFIX ".so")
 gpdb_apply_module_link_options(pageinspect)
+
+# Source module suites also exercise standard contrib extensions that are not
+# part of the production target list.  Build them natively so the test
+# artifact has the same extension surface as the legacy installation.
+set(GPDB_SOURCE_EXTENSION_TARGETS)
+foreach(_source_extension IN ITEMS btree_gin pg_stat_statements)
+  add_library(${_source_extension} MODULE
+    "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.c")
+  gpdb_apply_common_options(${_source_extension})
+  add_dependencies(${_source_extension} gpdb-generated)
+  target_include_directories(${_source_extension} PRIVATE
+    ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend")
+  target_link_libraries(${_source_extension} PRIVATE gpdb-platform)
+  set_target_properties(${_source_extension} PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(${_source_extension})
+  list(APPEND GPDB_SOURCE_EXTENSION_TARGETS ${_source_extension})
+endforeach()
+if(GPDB_WITH_OPENSSL)
+  add_library(sslinfo MODULE "${CMAKE_SOURCE_DIR}/contrib/sslinfo/sslinfo.c")
+  gpdb_apply_common_options(sslinfo)
+  add_dependencies(sslinfo gpdb-generated)
+  target_include_directories(sslinfo PRIVATE
+    ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend")
+  target_link_libraries(sslinfo PRIVATE gpdb-platform)
+  set_target_properties(sslinfo PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(sslinfo)
+  list(APPEND GPDB_SOURCE_EXTENSION_TARGETS sslinfo)
+endif()
 
 foreach(_gpdb_debug_extension IN ITEMS gp_inject_fault gp_debug_numsegments)
   add_library(${_gpdb_debug_extension} MODULE
