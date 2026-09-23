@@ -3860,16 +3860,10 @@ SignalMppBackends(int sig)
 
 		if (MyProc == proc)
 			continue;
-		if (proc->isBackgroundWorker)
+		/* Prepared transactions have a PGPROC entry but no backend process. */
+		if (proc->pid == 0)
 			continue;
-		/*
-		 * A dispatched recovery command can have multiple QE backends with
-		 * the same session ID.  Do not terminate the rest of that gang while
-		 * one of its members is executing gp_terminate_mpp_backends(); doing
-		 * so lets concurrent dispatches terminate each other during DTX
-		 * recovery and can make the postmaster shut down.
-		 */
-		if (gp_session_id > 0 && proc->mppSessionId == gp_session_id)
+		if (proc->isBackgroundWorker)
 			continue;
 
 		if (proc->mppSessionId > 0)

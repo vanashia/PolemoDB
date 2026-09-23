@@ -27,6 +27,18 @@ check_symbol_exists(dlopen "dlfcn.h" GPDB_HAVE_DLOPEN)
 check_symbol_exists(strchrnul "string.h" GPDB_HAVE_STRCHRNUL)
 check_symbol_exists(fls "strings.h" GPDB_HAVE_FLS)
 check_symbol_exists(getpeereid "unistd.h" GPDB_HAVE_GETPEEREID)
+check_symbol_exists(strerror_r "string.h" GPDB_HAVE_STRERROR_R)
+if(GPDB_HAVE_STRERROR_R)
+  check_c_source_compiles("#define _GNU_SOURCE
+#include <stddef.h>
+#include <string.h>
+int main(void)
+{
+  int (*strerror_r_int)(int, char *, size_t) = strerror_r;
+  char buffer[64];
+  return strerror_r_int(0, buffer, sizeof(buffer));
+}" GPDB_STRERROR_R_INT)
+endif()
 set(CMAKE_REQUIRED_DEFINITIONS "${_gpdb_saved_required_definitions}")
 set(CMAKE_REQUIRED_LIBRARIES "${_gpdb_saved_required_libraries}")
 unset(_gpdb_saved_required_definitions)

@@ -172,7 +172,7 @@ gpdb_apply_module_link_options(pageinspect)
 # part of the production target list.  Build them natively so the test
 # artifact has the same extension surface as the legacy installation.
 set(GPDB_SOURCE_EXTENSION_TARGETS)
-foreach(_source_extension IN ITEMS btree_gin pg_stat_statements)
+foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements)
   add_library(${_source_extension} MODULE
     "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.c")
   gpdb_apply_common_options(${_source_extension})
@@ -184,6 +184,18 @@ foreach(_source_extension IN ITEMS btree_gin pg_stat_statements)
   gpdb_apply_module_link_options(${_source_extension})
   list(APPEND GPDB_SOURCE_EXTENSION_TARGETS ${_source_extension})
 endforeach()
+
+# The external protocol regression uses this backend loadable module directly
+# rather than through CREATE EXTENSION.
+add_library(gpextprotocol MODULE contrib/extprotocol/gpextprotocol.c)
+gpdb_apply_common_options(gpextprotocol)
+add_dependencies(gpextprotocol gpdb-generated)
+target_include_directories(gpextprotocol PRIVATE
+  ${_gpdb_include_dirs} "${CMAKE_SOURCE_DIR}/src/backend")
+target_link_libraries(gpextprotocol PRIVATE gpdb-platform)
+set_target_properties(gpextprotocol PROPERTIES PREFIX "" SUFFIX ".so")
+gpdb_apply_module_link_options(gpextprotocol)
+list(APPEND GPDB_SOURCE_EXTENSION_TARGETS gpextprotocol)
 if(GPDB_WITH_OPENSSL)
   add_library(sslinfo MODULE "${CMAKE_SOURCE_DIR}/contrib/sslinfo/sslinfo.c")
   gpdb_apply_common_options(sslinfo)

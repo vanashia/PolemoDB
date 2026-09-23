@@ -256,7 +256,7 @@ if(TARGET plpython3)
 endif()
 
 add_custom_target(gpdb-source-test-tools DEPENDS ${_gpdb_source_test_targets}
-  gpdb-regression-tools)
+  gpdb-regression-tools gpextprotocol citext)
 
 install(TARGETS
   isolationtester pg_isolation_regress pg_isolation2_regress

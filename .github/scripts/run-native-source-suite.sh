@@ -111,12 +111,17 @@ pg_regress() {
   local outputdir="$3"
   local tablespace_root="$RUNNER_TEMP/${SUITE}-${name}-tablespace"
   shift 3
+  # pg_regress expands @abs_srcdir@ and @abs_builddir@ independently. Run
+  # against a writable copy so both paths and relative \copy/\! commands
+  # resolve inside the self-contained source-test artifact. This also keeps
+  # generated SQL/results out of the installed artifact and avoids relying on
+  # the Actions workspace as the shell-command cwd.
+  rm -rf "$outputdir"
   mkdir -p "$outputdir"
-  mkdir -p "$inputdir/results"
-  ln -sfn "$regress_module_path/regress.so" "$inputdir/regress.so"
+  cp -a "$inputdir/." "$outputdir/"
   ln -sfn "$regress_module_path/regress.so" "$outputdir/regress.so"
-  ln -sfn "$inputdir/data" "$outputdir/data"
-  ln -sfn "$inputdir/test_dbconn.py" "$outputdir/test_dbconn.py"
+  ln -sfn "$POMELODB_INSTALL_PREFIX/bin/twophase_pqexecparams" \
+    "$outputdir/twophase_pqexecparams"
   mkdir -p \
     "$tablespace_root/testtablespace" \
     "$tablespace_root/testtablespace_otherloc" \
@@ -131,9 +136,9 @@ pg_regress() {
     "$tablespace_root/testtablespace_mytempsp3" \
     "$tablespace_root/testtablespace_mytempsp4" \
     "$tablespace_root/testtablespace_database_tablespace"
-  run_command "$name" 45m \
+  run_in_directory "$name" 45m "$outputdir" \
     "$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
-    --inputdir="$inputdir" \
+    --inputdir="$outputdir" \
     --outputdir="$outputdir" \
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
     --dlpath="$regress_module_path" \

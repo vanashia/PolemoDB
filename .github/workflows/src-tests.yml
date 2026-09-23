@@ -61,6 +61,7 @@ jobs:
             -DGPDB_WITH_LIBXML=ON \
             -DGPDB_WITH_ZLIB=ON \
             -DGPDB_WITH_LIBBZ2=ON \
+            -DGPDB_WITH_LIBCURL=ON \
             -DGPDB_WITH_ZSTD=ON \
             -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
@@ -83,6 +84,10 @@ jobs:
             test -r "$install_root/lib/postgresql/$module" || \
               test -r "$install_root/share/postgresql/regress/$module"
           done
+          for module in citext.so gpextprotocol.so; do
+            test -r "$install_root/lib/postgresql/$module"
+          done
+          test "$(rg -c '^#define USE_CURL 1' build-src-tests/generated/src/include/pg_config.h)" -eq 1
           for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
             test -d "$source_root/$suite"
           done

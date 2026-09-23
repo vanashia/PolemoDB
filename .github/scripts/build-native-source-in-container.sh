@@ -19,6 +19,7 @@ cmake -S /workspace -B /tmp/pomelodb-build -G Ninja \
   -DGPDB_WITH_LIBXML=ON \
   -DGPDB_WITH_ZLIB=ON \
   -DGPDB_WITH_LIBBZ2=ON \
+  -DGPDB_WITH_LIBCURL=ON \
   -DGPDB_WITH_ZSTD=ON \
   -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
@@ -27,5 +28,7 @@ cmake --install /tmp/pomelodb-build --prefix /tmp/pomelodb-install
 
 test -x /tmp/pomelodb-install/bin/pg_regress
 test -x /tmp/pomelodb-install/bin/pg_isolation_regress
+test -r /tmp/pomelodb-install/lib/postgresql/citext.so
+test -r /tmp/pomelodb-install/lib/postgresql/gpextprotocol.so
 test -d /tmp/pomelodb-install/share/postgresql/source-tests
 tar -C /tmp -czf "$BUILD_ARTIFACT_DIR/pomelodb-native.tar.gz" pomelodb-install
