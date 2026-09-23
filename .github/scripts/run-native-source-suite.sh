@@ -159,7 +159,7 @@ run_tap_suite() {
     TESTLOGDIR="$RUNNER_TEMP/pomelodb-${SUITE}-tap/log" \
     TESTDATADIR="$RUNNER_TEMP/pomelodb-${SUITE}-tap/data" \
     PG_REGRESS="$POMELODB_INSTALL_PREFIX/bin/pg_regress" \
-    REGRESS_SHLIB="$POMELODB_INSTALL_PREFIX/lib/postgresql/regress.so" \
+    REGRESS_SHLIB="$regress_module_path/regress.so" \
     top_builddir="$POMELODB_INSTALL_PREFIX" \
     PGPORT="$PGPORT" \
     with_gssapi=yes with_krb_srvnam=postgres with_ldap=yes with_openssl=yes \
@@ -198,6 +198,24 @@ append_failure_diagnostics() {
     )
   fi
 
+  if [[ "$SUITE" == ldap ]]; then
+    local ldap_config="$RUNNER_TEMP/pomelodb-ldap-tap/data/slapd.conf"
+    if [[ -f "$ldap_config" ]]; then
+      {
+        echo
+        echo "===== LDAP slapd configuration diagnostics ====="
+        if command -v slaptest >/dev/null 2>&1; then
+          slaptest -f "$ldap_config" -u 2>&1 || true
+        else
+          /usr/sbin/slapd -T test -f "$ldap_config" 2>&1 || true
+        fi
+        echo "===== LDAP slapd foreground diagnostics ====="
+        timeout --kill-after=5s 5s /usr/sbin/slapd \
+          -d 1 -f "$ldap_config" -h ldap://127.0.0.1:0 2>&1 || true
+      } >> "$log_file"
+    fi
+  fi
+
   if [[ -n "${POMELODB_CLUSTER_ROOT:-}" && -d "$POMELODB_CLUSTER_ROOT" ]]; then
     local cluster_tail="$results_root/cluster-log-tail.log"
     : > "$cluster_tail"
@@ -211,7 +229,7 @@ append_failure_diagnostics() {
       [[ "$diagnostic_count" -lt 80 ]] || break
     done < <(
       find "$POMELODB_CLUSTER_ROOT" -type f \
-        \( -name '*.log' -o -path '*/pg_log/*' \) \
+        \( -path '*/log/*' -o -path '*/pg_log/*' \) \
         -print0 2>/dev/null
     )
     if [[ ! -s "$cluster_tail" ]]; then
@@ -273,9 +291,9 @@ case "$SUITE" in
     ;;
   fdw)
     fdw_outputdir="$results_root/fdw"
-    mkdir -p "$fdw_outputdir"
+    mkdir -p "$fdw_outputdir/results"
     ln -sfn "$POMELODB_INSTALL_PREFIX/bin/extended_protocol_commit_test" \
-      "$fdw_outputdir/extended_protocol_commit_test"
+      "$fdw_outputdir/results/extended_protocol_commit_test"
     pg_regress fdw "$SOURCE_TEST_ROOT/fdw" "$fdw_outputdir" \
       --load-extension=extended_protocol_commit_test_fdw \
       extended_protocol_commit_test
@@ -322,6 +340,12 @@ case "$SUITE" in
             # test_extdepend is intentionally excluded by the module's
             # Makefile until GPDB issue 14532 is resolved.
             tests=(test_extensions)
+            ;;
+          test_ddl_deparse)
+            # The first test creates the event trigger and all following
+            # scripts depend on those objects.  pg_regress otherwise runs
+            # the module's scripts concurrently.
+            module_regress_args+=("--max-concurrent-tests=1")
             ;;
           test_rls_hooks)
             module_regress_args+=("--temp-config=$module_dir/rls_hooks.conf")
