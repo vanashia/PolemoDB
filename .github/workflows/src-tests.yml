@@ -62,6 +62,7 @@ jobs:
             -DGPDB_WITH_ZLIB=ON \
             -DGPDB_WITH_LIBBZ2=ON \
             -DGPDB_WITH_LIBCURL=ON \
+            -DGPDB_WITH_LLVM=ON \
             -DGPDB_WITH_ZSTD=ON \
             -DGPDB_APR_CONFIG=/usr/bin/apr-1-config
 
@@ -77,7 +78,7 @@ jobs:
           set -euo pipefail
           install_root="$RUNNER_TEMP/pomelodb"
           source_root="$install_root/share/postgresql/source-tests"
-          for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester; do
+          for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester gpfdist; do
             test -x "$install_root/bin/$program"
           done
           for module in regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
@@ -87,6 +88,8 @@ jobs:
           for module in citext.so gpextprotocol.so; do
             test -r "$install_root/lib/postgresql/$module"
           done
+          test -r "$install_root/lib/postgresql/llvmjit.so"
+          test -r "$install_root/lib/postgresql/llvmjit_types.bc"
           test "$(grep -c '^#define USE_CURL 1' build-src-tests/generated/src/include/pg_config.h)" -eq 1
           for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
             test -d "$source_root/$suite"

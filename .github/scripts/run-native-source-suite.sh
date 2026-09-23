@@ -122,6 +122,16 @@ pg_regress() {
   ln -sfn "$regress_module_path/regress.so" "$outputdir/regress.so"
   ln -sfn "$POMELODB_INSTALL_PREFIX/bin/twophase_pqexecparams" \
     "$outputdir/twophase_pqexecparams"
+  # These source suites load helper modules by relative path.  Stage them
+  # after copying the input tree; callers that stage them before pg_regress()
+  # would have them removed by the cleanup above.
+  local module_name module_path
+  for module_name in fsync_helper gplibpq heap_checksum_helper; do
+    module_path="$POMELODB_INSTALL_PREFIX/lib/postgresql/${module_name}.so"
+    if [[ -r "$module_path" ]]; then
+      ln -sfn "$module_path" "$outputdir/${module_name}.so"
+    fi
+  done
   mkdir -p \
     "$tablespace_root/testtablespace" \
     "$tablespace_root/testtablespace_otherloc" \
@@ -148,23 +158,29 @@ pg_regress() {
     --max-concurrent-tests=20 "$@"
 }
 
-stage_source_test_module() {
-  local module_name="$1"
-  local outputdir="$2"
-  local module_path="$POMELODB_INSTALL_PREFIX/lib/postgresql/${module_name}.so"
-  test -r "$module_path"
-  ln -sfn "$module_path" "$outputdir/${module_name}.so"
-}
-
 pg_isolation_regress() {
   local name="$1"
   local inputdir="$2"
   local outputdir="$3"
-  shift 3
-  mkdir -p "$outputdir"
-  run_command "$name" 45m \
-    "$POMELODB_INSTALL_PREFIX/bin/pg_isolation_regress" \
-    --inputdir="$inputdir" \
+  local regress_program="$4"
+  local duration="$5"
+  shift 5
+  # Isolation2 input files contain both relative helper commands and
+  # @abs_srcdir@/../regress/regress.so references.  Run a writable copy and
+  # recreate the expected sibling regress directory inside the results tree.
+  rm -rf "$outputdir"
+  mkdir -p "$outputdir" "$outputdir/../regress"
+  cp -a "$inputdir/." "$outputdir/"
+  ln -sfn "$regress_module_path/regress.so" "$outputdir/../regress/regress.so"
+  for program in \
+    extended_protocol_test \
+    test_parallel_retrieve_cursor_extended_query \
+    test_parallel_retrieve_cursor_extended_query_error; do
+    ln -sfn "$POMELODB_INSTALL_PREFIX/bin/$program" "$outputdir/$program"
+  done
+  run_in_directory "$name" "$duration" "$outputdir" \
+    "$regress_program" \
+    --inputdir="$outputdir" \
     --outputdir="$outputdir" \
     --bindir="$POMELODB_INSTALL_PREFIX/bin" \
     --dlpath="$regress_module_path" \
@@ -299,37 +315,27 @@ case "$SUITE" in
   isolation)
     pg_isolation_regress isolation_schedule "$SOURCE_TEST_ROOT/isolation" \
       "$results_root/isolation" \
+      "$POMELODB_INSTALL_PREFIX/bin/pg_isolation_regress" 45m \
       --schedule="$SOURCE_TEST_ROOT/isolation/isolation_schedule"
     ;;
   isolation2)
-    run_in_directory isolation2 60m "$SOURCE_TEST_ROOT/isolation2" \
-      "$POMELODB_INSTALL_PREFIX/bin/pg_isolation2_regress" \
-      --inputdir="$SOURCE_TEST_ROOT/isolation2" \
-      --outputdir="$results_root/isolation2" \
-      --bindir="$POMELODB_INSTALL_PREFIX/bin" \
-      --dlpath="$regress_module_path" \
+    pg_isolation_regress isolation2 "$SOURCE_TEST_ROOT/isolation2" \
+      "$results_root/isolation2" \
+      "$POMELODB_INSTALL_PREFIX/bin/pg_isolation2_regress" 60m \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       --init-file="$SOURCE_TEST_ROOT/isolation2/init_file_isolation2" \
-      --load-extension=gp_inject_fault \
-      --max-concurrent-tests=10 \
       --schedule="$SOURCE_TEST_ROOT/isolation2/isolation2_schedule"
     ;;
   fsync)
-    mkdir -p "$results_root/fsync"
-    stage_source_test_module fsync_helper "$results_root/fsync"
     pg_regress fsync "$SOURCE_TEST_ROOT/fsync" "$results_root/fsync" \
       setup bgwriter_checkpoint
     ;;
   walrep)
-    mkdir -p "$results_root/walrep"
-    stage_source_test_module gplibpq "$results_root/walrep"
     pg_regress walrep "$SOURCE_TEST_ROOT/walrep" "$results_root/walrep" \
       setup replication_views_mirrored missing_xlog \
       walreceiver generate_ao_xlog generate_aoco_xlog
     ;;
   heap_checksum)
-    mkdir -p "$results_root/heap_checksum"
-    stage_source_test_module heap_checksum_helper "$results_root/heap_checksum"
     pg_regress heap_checksum "$SOURCE_TEST_ROOT/heap_checksum" \
       "$results_root/heap_checksum" \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \

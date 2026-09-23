@@ -9,6 +9,61 @@ if(GPDB_WITH_PYTHON)
   find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 endif()
 find_package(PkgConfig QUIET)
+
+if(GPDB_WITH_LLVM)
+  find_program(GPDB_LLVM_CONFIG_EXECUTABLE
+    NAMES llvm-config llvm-config-19 llvm-config-18 llvm-config-17
+      llvm-config-16 llvm-config-15 llvm-config-14 llvm-config-13
+      llvm-config-12 llvm-config-11 llvm-config-10 llvm-config-9
+      llvm-config-8 llvm-config-7)
+  if(NOT GPDB_LLVM_CONFIG_EXECUTABLE)
+    message(FATAL_ERROR
+      "llvm-config is required when GPDB_WITH_LLVM=ON")
+  endif()
+  find_program(GPDB_LLVM_CLANG_EXECUTABLE
+    NAMES clang clang-19 clang-18 clang-17 clang-16 clang-15 clang-14
+      clang-13 clang-12 clang-11 clang-10 clang-9 clang-8 clang-7)
+  if(NOT GPDB_LLVM_CLANG_EXECUTABLE)
+    message(FATAL_ERROR "clang is required when GPDB_WITH_LLVM=ON")
+  endif()
+
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --version
+    OUTPUT_VARIABLE GPDB_LLVM_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _gpdb_llvm_version_status)
+  if(_gpdb_llvm_version_status OR NOT GPDB_LLVM_VERSION MATCHES "^[0-9]+\\.")
+    message(FATAL_ERROR "${GPDB_LLVM_CONFIG_EXECUTABLE} does not work")
+  endif()
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --cppflags
+    OUTPUT_VARIABLE _gpdb_llvm_cppflags
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --cxxflags
+    OUTPUT_VARIABLE _gpdb_llvm_cxxflags
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --ldflags
+    OUTPUT_VARIABLE _gpdb_llvm_ldflags
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(
+    COMMAND "${GPDB_LLVM_CONFIG_EXECUTABLE}" --libs --system-libs
+    OUTPUT_VARIABLE _gpdb_llvm_libs
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  separate_arguments(GPDB_LLVM_CPPFLAGS UNIX_COMMAND "${_gpdb_llvm_cppflags}")
+  separate_arguments(GPDB_LLVM_CXXFLAGS UNIX_COMMAND "${_gpdb_llvm_cxxflags}")
+  separate_arguments(GPDB_LLVM_LDFLAGS UNIX_COMMAND "${_gpdb_llvm_ldflags}")
+  separate_arguments(GPDB_LLVM_LIBS UNIX_COMMAND "${_gpdb_llvm_libs}")
+  unset(_gpdb_llvm_cppflags)
+  unset(_gpdb_llvm_cxxflags)
+  unset(_gpdb_llvm_ldflags)
+  unset(_gpdb_llvm_libs)
+endif()
 if(NOT WIN32)
   find_library(GPDB_M_LIBRARY NAMES m REQUIRED)
   find_library(GPDB_CRYPT_LIBRARY NAMES crypt)
@@ -19,6 +74,7 @@ endif()
 # declarations when the corresponding HAVE_* macro is absent.
 set(_gpdb_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
 set(_gpdb_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+set(_gpdb_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
 set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
 set(CMAKE_REQUIRED_LIBRARIES ${GPDB_M_LIBRARY} ${GPDB_CRYPT_LIBRARY})
 check_symbol_exists(crypt "unistd.h" GPDB_HAVE_CRYPT)
@@ -27,8 +83,10 @@ check_symbol_exists(dlopen "dlfcn.h" GPDB_HAVE_DLOPEN)
 check_symbol_exists(strchrnul "string.h" GPDB_HAVE_STRCHRNUL)
 check_symbol_exists(fls "strings.h" GPDB_HAVE_FLS)
 check_symbol_exists(getpeereid "unistd.h" GPDB_HAVE_GETPEEREID)
+check_symbol_exists(readlink "unistd.h" GPDB_HAVE_READLINK)
 check_symbol_exists(strerror_r "string.h" GPDB_HAVE_STRERROR_R)
 if(GPDB_HAVE_STRERROR_R)
+  set(CMAKE_REQUIRED_FLAGS "-Werror=incompatible-pointer-types")
   check_c_source_compiles("#define _GNU_SOURCE
 #include <stddef.h>
 #include <string.h>
@@ -39,10 +97,26 @@ int main(void)
   return strerror_r_int(0, buffer, sizeof(buffer));
 }" GPDB_STRERROR_R_INT)
 endif()
+set(CMAKE_REQUIRED_FLAGS "${_gpdb_saved_required_flags}")
 set(CMAKE_REQUIRED_DEFINITIONS "${_gpdb_saved_required_definitions}")
 set(CMAKE_REQUIRED_LIBRARIES "${_gpdb_saved_required_libraries}")
+unset(_gpdb_saved_required_flags)
 unset(_gpdb_saved_required_definitions)
 unset(_gpdb_saved_required_libraries)
+
+set(_gpdb_saved_required_definitions "${CMAKE_REQUIRED_DEFINITIONS}")
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+check_c_source_compiles("#include <ctype.h>
+#include <locale.h>
+#include <wctype.h>
+int main(void)
+{
+  locale_t value = newlocale(LC_ALL_MASK, \"C\", (locale_t) 0);
+  return isalpha_l('a', value) == 0 || iswalpha_l(L'a', value) == 0;
+}"
+  GPDB_HAVE_LOCALE_T)
+set(CMAKE_REQUIRED_DEFINITIONS "${_gpdb_saved_required_definitions}")
+unset(_gpdb_saved_required_definitions)
 
 # Keep the generated dynamic shared-memory default consistent with the host.
 # initdb copies postgresql.conf.sample, which defaults to POSIX DSM when

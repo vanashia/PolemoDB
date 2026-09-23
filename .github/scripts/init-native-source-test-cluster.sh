@@ -8,7 +8,7 @@ export PATH="$POMELODB_INSTALL_PREFIX/bin:$PATH"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}"
 source "$POMELODB_INSTALL_PREFIX/greenplum_path.sh"
-export LC_ALL="${POMELODB_LOCALE:-C.UTF-8}"
+export LC_ALL="${POMELODB_LOCALE:-en_US.UTF-8}"
 
 if [[ "${POMELODB_SKIP_SSH_START:-0}" != 1 ]]; then
   if [[ "${EUID}" -eq 0 ]]; then
