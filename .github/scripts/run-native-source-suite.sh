@@ -120,6 +120,7 @@ pg_regress() {
   rm -rf "$outputdir"
   mkdir -p "$outputdir"
   cp -a "$inputdir/." "$outputdir/"
+  mkdir -p "$outputdir/hooktest" "$outputdir/query_info_hook_test"
   ln -sfn "$regress_module_path/regress.so" "$outputdir/regress.so"
   ln -sfn "$regress_module_path/hooktest/test_hook.so" \
     "$outputdir/hooktest/test_hook.so"

@@ -36,11 +36,11 @@ REINDEX
 3: insert into old_relfilenodes (select gp_segment_id as dbid, relfilenode, oid, relname from gp_dist_random('pg_class') where relname like 'reindex_crtab_part_ao_btree%_idx' union all select gp_segment_id as dbid, relfilenode, oid, relname from pg_class where relname like 'reindex_crtab_part_ao_btree%_idx');
 INSERT 0 12
 -- Expect two distinct relfilenodes for one segment in old_relfilenodes table.
-3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname;
+3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname order by relname;
  count | relname                                           
 -------+---------------------------------------------------
- 1     | reindex_crtab_part_ao_btree_1_prt_p_one_id_idx    
  2     | reindex_crtab_part_ao_btree_1_prt_de_fault_id_idx 
+ 1     | reindex_crtab_part_ao_btree_1_prt_p_one_id_idx    
  1     | reindex_crtab_part_ao_btree_id_idx                
 (3 rows)
 3: COMMIT;
@@ -52,11 +52,11 @@ REINDEX
 3: insert into old_relfilenodes (select gp_segment_id as dbid, relfilenode, oid, relname from gp_dist_random('pg_class') where relname like 'reindex_crtab_part_ao_btree%_idx' union all select gp_segment_id as dbid, relfilenode, oid, relname from pg_class where relname like 'reindex_crtab_part_ao_btree%_idx');
 INSERT 0 12
 -- Expect three distinct relfilenodes per segment for "1_prt_de_fault" index.
-3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname;
+3: select distinct count(distinct relfilenode), relname from old_relfilenodes group by dbid, relname order by relname;
  count | relname                                           
 -------+---------------------------------------------------
- 3     | reindex_crtab_part_ao_btree_1_prt_de_fault_id_idx 
  2     | reindex_crtab_part_ao_btree_1_prt_p_one_id_idx    
+ 3     | reindex_crtab_part_ao_btree_1_prt_de_fault_id_idx 
  1     | reindex_crtab_part_ao_btree_id_idx                
 (3 rows)
 

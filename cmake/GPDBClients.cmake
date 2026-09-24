@@ -188,7 +188,7 @@ endforeach()
 # The native source-test suites exercise these extensions from the installed
 # production-style cluster.  Keep their binaries and extension metadata in
 # the same CMake artifact instead of relying on the legacy contrib makefiles.
-foreach(_source_extension IN ITEMS file_fdw gpformatter pg_hint_plan)
+foreach(_source_extension IN ITEMS file_fdw gpformatter pg_hint_plan fixedwidth)
   set(_source_extension_sources
     "${CMAKE_SOURCE_DIR}/contrib/file_fdw/file_fdw.c")
   if(_source_extension STREQUAL "gpformatter")
@@ -197,6 +197,9 @@ foreach(_source_extension IN ITEMS file_fdw gpformatter pg_hint_plan)
   elseif(_source_extension STREQUAL "pg_hint_plan")
     set(_source_extension_sources
       "${CMAKE_SOURCE_DIR}/gpcontrib/pg_hint_plan/pg_hint_plan.c")
+  elseif(_source_extension STREQUAL "fixedwidth")
+    set(_source_extension_sources
+      "${CMAKE_SOURCE_DIR}/contrib/formatter_fixedwidth/fixedwidth.c")
   endif()
   add_library(${_source_extension} MODULE ${_source_extension_sources})
   gpdb_apply_common_options(${_source_extension})
@@ -205,7 +208,8 @@ foreach(_source_extension IN ITEMS file_fdw gpformatter pg_hint_plan)
     ${_gpdb_include_dirs}
     "${CMAKE_SOURCE_DIR}/src/backend"
     "${CMAKE_SOURCE_DIR}/gpcontrib/pg_hint_plan"
-    "${CMAKE_SOURCE_DIR}/src/pl/plpgsql/src")
+    "${CMAKE_SOURCE_DIR}/src/pl/plpgsql/src"
+    "${CMAKE_SOURCE_DIR}/contrib/formatter_fixedwidth")
   target_link_libraries(${_source_extension} PRIVATE gpdb-platform)
   set_target_properties(${_source_extension} PROPERTIES PREFIX "" SUFFIX ".so")
   gpdb_apply_module_link_options(${_source_extension})

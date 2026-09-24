@@ -137,6 +137,8 @@ install(FILES src/backend/catalog/cdb_schema.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
 install(FILES gpcontrib/gp_toolkit/sql/gp_toolkit.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
+install(FILES contrib/formatter_fixedwidth/fixedwidth.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
 if(GPDB_WITH_ZSTD)
   install(FILES gpcontrib/zstd/zstd_compression.sql
     DESTINATION "${GPDB_INSTALL_DATADIR}/cdb_init.d")
