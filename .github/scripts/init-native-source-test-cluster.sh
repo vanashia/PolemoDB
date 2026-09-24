@@ -111,7 +111,7 @@ fi
 # segment catalog.  Keep the catalog address loopback-only so gpfdist started
 # on a segment is reachable by the external-table tests in this single-host
 # cluster.
-psql -v ON_ERROR_STOP=1 -c \
+psql -U gpadmin -v ON_ERROR_STOP=1 -c \
   "UPDATE gp_segment_configuration SET hostname = 'localhost' WHERE hostname <> 'localhost'"
 gpconfig -c fsync -v off --skipvalidation
 gpstop -u
