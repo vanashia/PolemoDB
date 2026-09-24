@@ -141,6 +141,10 @@ select relid::regclass as relname, phase, heap_blks_total, heap_blks_scanned, he
 2: SELECT gp_inject_fault('vacuum_worker_changed', 'suspend', dbid) FROM gp_segment_configuration WHERE content > -1 AND role = 'p';
 -- resume walsender and let it exit so that mirror stop can be detected
 2: SELECT gp_inject_fault_infinite('wal_sender_loop', 'reset', dbid) FROM gp_segment_configuration WHERE role = 'p' and content = 1;
+-- Force FTS to observe the stopped mirror instead of relying on the periodic probe.
+-- start_ignore
+2: SELECT wait_for_mirror_down(1::smallint, 30);
+-- end_ignore
 -- Ensure we enter into the target logic which stops cumulative data but
 -- initializes a new vacrelstats at the beginning of post-cleanup phase.
 -- Also all segments should reach to the same "vacuum_worker_changed" point
