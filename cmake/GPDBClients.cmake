@@ -185,6 +185,33 @@ foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements tsm_syste
   list(APPEND GPDB_SOURCE_EXTENSION_TARGETS ${_source_extension})
 endforeach()
 
+# The native source-test suites exercise these extensions from the installed
+# production-style cluster.  Keep their binaries and extension metadata in
+# the same CMake artifact instead of relying on the legacy contrib makefiles.
+foreach(_source_extension IN ITEMS file_fdw gpformatter pg_hint_plan)
+  set(_source_extension_sources
+    "${CMAKE_SOURCE_DIR}/contrib/file_fdw/file_fdw.c")
+  if(_source_extension STREQUAL "gpformatter")
+    set(_source_extension_sources
+      "${CMAKE_SOURCE_DIR}/contrib/formatter/gpformatter.c")
+  elseif(_source_extension STREQUAL "pg_hint_plan")
+    set(_source_extension_sources
+      "${CMAKE_SOURCE_DIR}/gpcontrib/pg_hint_plan/pg_hint_plan.c")
+  endif()
+  add_library(${_source_extension} MODULE ${_source_extension_sources})
+  gpdb_apply_common_options(${_source_extension})
+  add_dependencies(${_source_extension} gpdb-generated)
+  target_include_directories(${_source_extension} PRIVATE
+    ${_gpdb_include_dirs}
+    "${CMAKE_SOURCE_DIR}/src/backend"
+    "${CMAKE_SOURCE_DIR}/gpcontrib/pg_hint_plan"
+    "${CMAKE_SOURCE_DIR}/src/pl/plpgsql/src")
+  target_link_libraries(${_source_extension} PRIVATE gpdb-platform)
+  set_target_properties(${_source_extension} PROPERTIES PREFIX "" SUFFIX ".so")
+  gpdb_apply_module_link_options(${_source_extension})
+  list(APPEND GPDB_SOURCE_EXTENSION_TARGETS ${_source_extension})
+endforeach()
+
 # The external protocol regression uses this backend loadable module directly
 # rather than through CREATE EXTENSION.
 add_library(gpextprotocol MODULE contrib/extprotocol/gpextprotocol.c)

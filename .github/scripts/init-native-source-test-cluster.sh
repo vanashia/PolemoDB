@@ -109,6 +109,7 @@ if ! psql -Atqc "select 1 from pg_roles where rolname = 'gpadmin'" | grep -qx 1;
   psql -v ON_ERROR_STOP=1 -c "create role gpadmin superuser login"
 fi
 gpconfig -c fsync -v off --skipvalidation
+gpconfig -c max_stack_depth -v 2MB --skipvalidation
 gpstop -u
 gpstate -Q
 psql -v ON_ERROR_STOP=1 -Atqc \

@@ -111,7 +111,8 @@ target_include_directories(pg_isolation2_regress PRIVATE
 target_link_libraries(pg_isolation2_regress PRIVATE pgcommon pgport gpdb-platform)
 
 gpdb_add_source_test_module(isolation2_regress_module
-  src/test/isolation2/isolation2_regress.c)
+  src/test/isolation2/isolation2_regress.c
+  src/test/isolation2/workfile_mgr_test.c)
 set_target_properties(isolation2_regress_module PROPERTIES OUTPUT_NAME isolation2_regress)
 
 foreach(_program IN ITEMS

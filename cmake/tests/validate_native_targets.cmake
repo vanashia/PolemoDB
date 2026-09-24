@@ -11,7 +11,8 @@ set(_gpdb_expected_targets
     libpq_shared pg_regress regress autoinc refint test_hook
     query_info_hook_test gp_toolkit gp_ao_co_diagnostics gp_workfile_mgr
     gp_session_state_memory_stats gp_instrument_shmem pageinspect gp_inject_fault
-    gp_debug_numsegments gpdb-regression-tools gpdb-regression)
+    gp_debug_numsegments file_fdw gpformatter pg_hint_plan isolation2_regress_module
+    gpdb-regression-tools gpdb-regression)
 file(STRINGS "${GPDB_BINARY_DIR}/CMakeCache.txt" _gpdb_gpfdist_enabled
      REGEX "^GPDB_ENABLE_GPFDIST:BOOL=ON$")
 if(_gpdb_gpfdist_enabled)

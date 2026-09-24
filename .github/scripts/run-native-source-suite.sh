@@ -121,6 +121,12 @@ pg_regress() {
   mkdir -p "$outputdir"
   cp -a "$inputdir/." "$outputdir/"
   ln -sfn "$regress_module_path/regress.so" "$outputdir/regress.so"
+  ln -sfn "$regress_module_path/hooktest/test_hook.so" \
+    "$outputdir/hooktest/test_hook.so"
+  ln -sfn "$regress_module_path/query_info_hook_test/query_info_hook_test.so" \
+    "$outputdir/query_info_hook_test/query_info_hook_test.so"
+  ln -sfn "$POMELODB_INSTALL_PREFIX/bin/extended_protocol_resqueue" \
+    "$outputdir/extended_protocol_resqueue"
   ln -sfn "$POMELODB_INSTALL_PREFIX/bin/twophase_pqexecparams" \
     "$outputdir/twophase_pqexecparams"
   # These source suites load helper modules by relative path.  Stage them

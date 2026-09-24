@@ -199,6 +199,21 @@ install(FILES
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments.control
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments--1.0.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
+install(FILES
+  contrib/file_fdw/file_fdw.control
+  contrib/file_fdw/file_fdw--1.0.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan.control
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.0.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.0--1.3.1.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.1--1.3.2.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.2--1.3.3.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.3--1.3.4.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.4--1.3.5.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.5--1.3.6.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.6--1.3.7.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.7--1.3.8.sql
+  gpcontrib/pg_hint_plan/pg_hint_plan--1.3.8--1.3.9.sql
+  DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
 foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements sslinfo tsm_system_rows)
   if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control")
     file(GLOB _source_extension_files
@@ -228,6 +243,8 @@ install(DIRECTORY src/test/regress/
   PATTERN "resultmap"
   PATTERN "init_file"
   PATTERN "test_dbconn.py")
+install(PROGRAMS gpcontrib/pg_hint_plan/sql/maskout.sh
+  DESTINATION "${GPDB_INSTALL_DATADIR}/source-tests/regress/sql")
 install(DIRECTORY "${GPDB_REGRESS_BUILD_DIR}/"
   DESTINATION "${GPDB_INSTALL_DATADIR}/regress"
   USE_SOURCE_PERMISSIONS

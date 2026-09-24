@@ -88,6 +88,12 @@ jobs:
           for module in citext.so gpextprotocol.so tsm_system_rows.so; do
             test -r "$install_root/lib/postgresql/$module"
           done
+          for module in file_fdw.so gpformatter.so pg_hint_plan.so; do
+            test -r "$install_root/lib/postgresql/$module"
+          done
+          for extension in file_fdw pg_hint_plan; do
+            test -r "$install_root/share/postgresql/extension/$extension.control"
+          done
           test -r "$install_root/share/postgresql/extension/tsm_system_rows.control"
           test -r "$install_root/lib/postgresql/llvmjit.so"
           test -r "$install_root/lib/postgresql/llvmjit_types.bc"
