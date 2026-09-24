@@ -81,7 +81,7 @@ jobs:
           for program in pg_regress pg_isolation_regress pg_isolation2_regress isolationtester gpfdist; do
             test -x "$install_root/bin/$program"
           done
-          for module in regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
+          for module in regress.so isolation2_regress.so fsync_helper.so gplibpq.so heap_checksum_helper.so; do
             test -r "$install_root/lib/postgresql/$module" || \
               test -r "$install_root/share/postgresql/regress/$module"
           done

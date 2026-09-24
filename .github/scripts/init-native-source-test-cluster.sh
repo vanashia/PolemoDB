@@ -31,10 +31,11 @@ grep -qxF "$(cat "$HOME/.ssh/id_ed25519.pub")" \
 chmod 600 "$HOME/.ssh/authorized_keys"
 ssh-keyscan -H "$(hostname -s)" localhost >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 
-# All database instances run in one CI container.  Use a stable loopback
-# hostname in the catalog so external-table tests can reach gpfdist without
-# depending on the container hostname being resolvable from every backend.
-coordinator_host=localhost
+# All database instances run in one CI container.  Keep the real container
+# hostname in the catalog: isolation2's recoverseg_from_file test constructs
+# recovery entries from os.uname(), and therefore requires the catalog and the
+# kernel hostname to agree.
+coordinator_host="$(hostname -s)"
 ssh-keyscan -H "$coordinator_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 cluster_root="$RUNNER_TEMP/pomelodb-native-mpp"
 mkdir -p \
@@ -107,13 +108,6 @@ pg_ctl -D "$coordinator_data_directory" reload
 if ! psql -Atqc "select 1 from pg_roles where rolname = 'gpadmin'" | grep -qx 1; then
   psql -v ON_ERROR_STOP=1 -c "create role gpadmin superuser login"
 fi
-# gpinitsystem resolves localhost to the container hostname when it writes the
-# segment catalog.  Keep the catalog address loopback-only so gpfdist started
-# on a segment is reachable by the external-table tests in this single-host
-# cluster.
-PGOPTIONS="-c gp_role=utility -c allow_system_table_mods=true" \
-  psql -U gpadmin -v ON_ERROR_STOP=1 -c \
-  "UPDATE gp_segment_configuration SET hostname = 'localhost' WHERE hostname <> 'localhost'"
 gpconfig -c fsync -v off --skipvalidation
 gpstop -u
 gpstate -Q

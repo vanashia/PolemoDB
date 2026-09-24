@@ -99,6 +99,7 @@ check_symbol_exists(fls "strings.h" GPDB_HAVE_FLS)
 check_symbol_exists(getpeereid "unistd.h" GPDB_HAVE_GETPEEREID)
 check_symbol_exists(readlink "unistd.h" GPDB_HAVE_READLINK)
 check_symbol_exists(strerror_r "string.h" GPDB_HAVE_STRERROR_R)
+check_include_file(langinfo.h GPDB_HAVE_LANGINFO_H)
 if(GPDB_HAVE_STRERROR_R)
   set(CMAKE_REQUIRED_FLAGS "-Werror=incompatible-pointer-types")
   check_c_source_compiles("#define _GNU_SOURCE

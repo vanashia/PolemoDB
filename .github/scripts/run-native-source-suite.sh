@@ -173,6 +173,8 @@ pg_isolation_regress() {
   mkdir -p "$outputdir" "$outputdir/../regress"
   cp -a "$inputdir/." "$outputdir/"
   ln -sfn "$regress_module_path/regress.so" "$outputdir/../regress/regress.so"
+  ln -sfn "$POMELODB_INSTALL_PREFIX/lib/postgresql/isolation2_regress.so" \
+    "$outputdir/isolation2_regress.so"
   for program in \
     extended_protocol_test \
     test_parallel_retrieve_cursor_extended_query \
@@ -321,11 +323,15 @@ case "$SUITE" in
       --schedule="$SOURCE_TEST_ROOT/isolation/isolation_schedule"
     ;;
   isolation2)
+    isolation2_tablespace_root=/tmp/pomelodb-isolation2-tablespace
+    rm -rf "$isolation2_tablespace_root"
+    mkdir -p "$isolation2_tablespace_root"
     pg_isolation_regress isolation2 "$SOURCE_TEST_ROOT/isolation2" \
       "$results_root/isolation2" \
       "$POMELODB_INSTALL_PREFIX/bin/pg_isolation2_regress" 90m \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       --init-file="$SOURCE_TEST_ROOT/isolation2/init_file_isolation2" \
+      --tablespace-dir="$isolation2_tablespace_root" \
       --schedule="$SOURCE_TEST_ROOT/isolation2/isolation2_schedule"
     ;;
   fsync)
