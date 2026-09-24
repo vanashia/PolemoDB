@@ -172,7 +172,7 @@ gpdb_apply_module_link_options(pageinspect)
 # part of the production target list.  Build them natively so the test
 # artifact has the same extension surface as the legacy installation.
 set(GPDB_SOURCE_EXTENSION_TARGETS)
-foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements)
+foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements tsm_system_rows)
   add_library(${_source_extension} MODULE
     "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.c")
   gpdb_apply_common_options(${_source_extension})

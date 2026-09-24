@@ -85,11 +85,13 @@ jobs:
             test -r "$install_root/lib/postgresql/$module" || \
               test -r "$install_root/share/postgresql/regress/$module"
           done
-          for module in citext.so gpextprotocol.so; do
+          for module in citext.so gpextprotocol.so tsm_system_rows.so; do
             test -r "$install_root/lib/postgresql/$module"
           done
+          test -r "$install_root/share/postgresql/extension/tsm_system_rows.control"
           test -r "$install_root/lib/postgresql/llvmjit.so"
           test -r "$install_root/lib/postgresql/llvmjit_types.bc"
+          command -v curl
           test "$(grep -c '^#define USE_CURL 1' build-src-tests/generated/src/include/pg_config.h)" -eq 1
           for suite in regress isolation isolation2 fsync walrep heap_checksum fdw locale authentication recovery kerberos ldap ssl modules perl; do
             test -d "$source_root/$suite"

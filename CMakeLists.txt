@@ -199,7 +199,7 @@ install(FILES
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments.control
   gpcontrib/gp_debug_numsegments/gp_debug_numsegments--1.0.sql
   DESTINATION "${GPDB_INSTALL_DATADIR}/extension")
-foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements sslinfo)
+foreach(_source_extension IN ITEMS btree_gin citext pg_stat_statements sslinfo tsm_system_rows)
   if(EXISTS "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control")
     file(GLOB _source_extension_files
       "${CMAKE_SOURCE_DIR}/contrib/${_source_extension}/${_source_extension}.control"

@@ -221,7 +221,7 @@ append_failure_diagnostics() {
     } >> "$log_file"
   done < <(
     find "$results_root" -type f \
-      \( -name regression.diffs -o -name regression.out \) \
+      \( -name regression.diffs -o -name regression.out -name 'gpfdist-*.log' \) \
       -print0 2>/dev/null
   )
 
