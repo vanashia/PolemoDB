@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #ifdef GPFXDIST
 #include <gpfxdist.h>
@@ -109,11 +110,52 @@ static int glob_and_copy(const char *pattern, int flags, int(*errfunc)(
 						 const char *epath, int eerno), glob_and_copy_t *pglob)
 {
 	glob_t 	g;
-	int 	i = glob(pattern, flags, errfunc, &g), j;
+	struct stat st;
+	char	*path_copy;
+	char	**a;
+	size_t	path_len;
+	int		mark_directory;
+	int 	i, j;
 
+	/*
+	 * libc glob() is unnecessary for the common case of a single literal
+	 * path.  Besides avoiding needless allocation, handling that case here
+	 * keeps file URLs out of the platform glob implementation.  Preserve
+	 * GLOB_MARK semantics because directory paths are expanded below.
+	 */
+	if (!strpbrk(pattern, "*?["))
+	{
+		path_len = strlen(pattern);
+		mark_directory = path_len > 0 &&
+			stat(pattern, &st) == 0 &&
+			S_ISDIR(st.st_mode) && pattern[path_len - 1] != '/';
+		path_copy = gfile_malloc(path_len + (mark_directory ? 2 : 1));
+		if (!path_copy)
+			return GLOB_NOSPACE;
+		memcpy(path_copy, pattern, path_len);
+		if (mark_directory)
+			path_copy[path_len++] = '/';
+		path_copy[path_len] = '\0';
+
+		a = gfile_malloc(sizeof *a * (pglob->gl_pathc + 1));
+		if (!a)
+		{
+			gfile_free(path_copy);
+			return GLOB_NOSPACE;
+		}
+		for (j = 0; j < pglob->gl_pathc; j++)
+			a[j] = pglob->gl_pathv[j];
+		if (pglob->gl_pathv)
+			gfile_free(pglob->gl_pathv);
+		a[pglob->gl_pathc++] = path_copy;
+		pglob->gl_pathv = a;
+		return 0;
+	}
+
+	i = glob(pattern, flags, errfunc, &g);
 	if (!i)
 	{
-		char **a = gfile_malloc(sizeof *a * (pglob->gl_pathc + g.gl_pathc));
+		a = gfile_malloc(sizeof *a * (pglob->gl_pathc + g.gl_pathc));
 
 		if (!a)
 			i = GLOB_NOSPACE;
@@ -1057,4 +1099,3 @@ bool_t fstream_is_win_pipe(fstream_t *fs)
 {
 	return fs->fd.is_win_pipe;
 }
-
