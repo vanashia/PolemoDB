@@ -70,6 +70,7 @@ COORDINATOR_PORT=15432
 STANDBY_HOSTNAME=$coordinator_host
 STANDBY_PORT=15433
 STANDBY_DATADIR=$cluster_root/coordinator-mirror
+LOCALE=en_US.UTF-8
 ENCODING=UNICODE
 TRUSTED_SHELL=ssh
 EOF
@@ -106,6 +107,12 @@ pg_ctl -D "$coordinator_data_directory" reload
 if ! psql -Atqc "select 1 from pg_roles where rolname = 'gpadmin'" | grep -qx 1; then
   psql -v ON_ERROR_STOP=1 -c "create role gpadmin superuser login"
 fi
+# gpinitsystem resolves localhost to the container hostname when it writes the
+# segment catalog.  Keep the catalog address loopback-only so gpfdist started
+# on a segment is reachable by the external-table tests in this single-host
+# cluster.
+psql -v ON_ERROR_STOP=1 -c \
+  "UPDATE gp_segment_configuration SET hostname = 'localhost' WHERE hostname <> 'localhost'"
 gpconfig -c fsync -v off --skipvalidation
 gpstop -u
 gpstate -Q
