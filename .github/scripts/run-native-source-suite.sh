@@ -331,15 +331,22 @@ case "$SUITE" in
     ;;
   isolation2)
     isolation2_tablespace_root=/tmp/pomelodb-isolation2-tablespace
+    isolation2_schedule="$RUNNER_TEMP/isolation2.schedule"
     rm -rf "$isolation2_tablespace_root"
     mkdir -p "$isolation2_tablespace_root"
+    # These fault-injection tests are also run as dedicated serial source-test
+    # jobs.  Exclude them from the broad concurrent isolation2 schedule so
+    # other isolation2 cases cannot interfere with their progress waits.
+    sed -E \
+      '/^test: vacuum_progress_(row|column)[[:space:]]*$/d' \
+      "$SOURCE_TEST_ROOT/isolation2/isolation2_schedule" > "$isolation2_schedule"
     pg_isolation_regress isolation2 "$SOURCE_TEST_ROOT/isolation2" \
       "$results_root/isolation2" \
       "$POMELODB_INSTALL_PREFIX/bin/pg_isolation2_regress" 90m \
       --init-file="$SOURCE_TEST_ROOT/regress/init_file" \
       --init-file="$SOURCE_TEST_ROOT/isolation2/init_file_isolation2" \
       --tablespace-dir="$isolation2_tablespace_root" \
-      --schedule="$SOURCE_TEST_ROOT/isolation2/isolation2_schedule"
+      --schedule="$isolation2_schedule"
     ;;
   fsync)
     pg_regress fsync "$SOURCE_TEST_ROOT/fsync" "$results_root/fsync" \
